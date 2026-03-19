@@ -4,11 +4,13 @@ import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.kiro.intellij.diff.KiroDiffHandler
 import kotlinx.serialization.json.*
 
 class McpToolHandler(private val project: Project) {
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val diffHandler = KiroDiffHandler(project)
 
     fun handleToolCall(toolName: String, arguments: JsonElement?): JsonElement {
         return when (toolName) {
@@ -17,6 +19,7 @@ class McpToolHandler(private val project: Project) {
             "getWorkspaceFolders" -> getWorkspaceFolders()
             "getDiagnostics" -> getDiagnostics(arguments)
             "openFile" -> openFile(arguments)
+            "openDiff" -> openDiff(arguments)
             else -> buildJsonObject { put("error", "Unknown tool: $toolName") }
         }
     }
@@ -88,6 +91,20 @@ class McpToolHandler(private val project: Project) {
         return buildJsonObject { put("success", true) }
     }
 
+    private fun openDiff(arguments: JsonElement?): JsonElement {
+        val args = arguments?.jsonObject ?: return buildJsonObject { put("error", "missing arguments") }
+        val filePath = args["path"]?.jsonPrimitive?.content ?: return buildJsonObject { put("error", "missing path") }
+        val original = args["original"]?.jsonPrimitive?.content
+        val modified = args["modified"]?.jsonPrimitive?.content
+
+        if (original != null && modified != null) {
+            diffHandler.showDiff(filePath, original, modified)
+        } else {
+            diffHandler.showDiffForFile(filePath)
+        }
+        return buildJsonObject { put("success", true) }
+    }
+
     fun getToolDefinitions(): JsonArray {
         return buildJsonArray {
             add(toolDef("getCurrentSelection", "Get the current text selection in the IDE editor"))
@@ -99,6 +116,15 @@ class McpToolHandler(private val project: Project) {
                 putJsonObject("properties") {
                     putJsonObject("path") { put("type", "string"); put("description", "File path to open") }
                     putJsonObject("line") { put("type", "integer"); put("description", "Line number to navigate to") }
+                }
+                putJsonArray("required") { add("path") }
+            }))
+            add(toolDef("openDiff", "Show a diff in the IDE diff viewer", buildJsonObject {
+                put("type", "object")
+                putJsonObject("properties") {
+                    putJsonObject("path") { put("type", "string"); put("description", "File path") }
+                    putJsonObject("original") { put("type", "string"); put("description", "Original content") }
+                    putJsonObject("modified") { put("type", "string"); put("description", "Modified content") }
                 }
                 putJsonArray("required") { add("path") }
             }))
