@@ -3,110 +3,76 @@ package com.kiro.intellij.chat
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.kiro.intellij.settings.KiroSettings
-import java.io.*
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
 import java.util.concurrent.CompletableFuture
 
 /**
- * kiro-cli 프로세스를 --no-interactive 모드로 실행하고
- * 입출력을 관리한다.
+ * kiro-cli를 매 메시지마다 --no-interactive로 실행하고,
+ * --resume으로 대화를 이어간다.
  */
 class KiroCliProcess(private val project: Project) {
 
     private val log = Logger.getInstance(KiroCliProcess::class.java)
-    private var process: Process? = null
-    private var writer: BufferedWriter? = null
-    private var onOutput: ((String) -> Unit)? = null
+    private var isFirstMessage = true
+    var model: String? = null
 
-    val isRunning: Boolean get() = process?.isAlive == true
+    fun sendMessage(message: String, onChunk: (String) -> Unit): CompletableFuture<String> {
+        val future = CompletableFuture<String>()
 
-    fun start(model: String? = null, onOutput: (String) -> Unit) {
-        this.onOutput = onOutput
-        val settings = KiroSettings.getInstance().state
-        val command = mutableListOf(settings.kiroCommand, "chat", "--no-interactive", "--wrap", "never")
-        if (model != null && model != "Auto") {
-            command.addAll(listOf("--model", model))
-        }
-
-        val workingDir = project.basePath ?: System.getProperty("user.home")
-        val pb = ProcessBuilder(command)
-            .directory(File(workingDir))
-            .redirectErrorStream(true)
-
-        process = pb.start()
-        writer = BufferedWriter(OutputStreamWriter(process!!.outputStream))
-
-        // 출력 읽기 스레드
         Thread({
             try {
-                val reader = BufferedReader(InputStreamReader(process!!.inputStream))
-                val buffer = StringBuilder()
-                val charBuf = CharArray(4096)
-                while (process?.isAlive == true) {
+                val settings = KiroSettings.getInstance().state
+                val command = mutableListOf(settings.kiroCommand, "chat", "--no-interactive", "--wrap", "never")
+
+                if (!isFirstMessage) {
+                    command.add("--resume")
+                }
+
+                val effectiveModel = model ?: settings.defaultModel
+                if (effectiveModel != "Auto") {
+                    command.addAll(listOf("--model", effectiveModel))
+                }
+
+                command.add(message)
+
+                val workingDir = project.basePath ?: System.getProperty("user.home")
+                val pb = ProcessBuilder(command)
+                    .directory(File(workingDir))
+                    .redirectErrorStream(true)
+
+                val process = pb.start()
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                val fullResponse = StringBuilder()
+
+                val charBuf = CharArray(1024)
+                while (true) {
                     val count = reader.read(charBuf)
                     if (count == -1) break
                     val raw = String(charBuf, 0, count)
                     val clean = stripAnsi(raw)
                     if (clean.isNotBlank()) {
-                        onOutput(clean)
+                        fullResponse.append(clean)
+                        onChunk(clean)
                     }
                 }
+
+                process.waitFor()
+                isFirstMessage = false
+                future.complete(fullResponse.toString().trim())
             } catch (e: Exception) {
-                if (process?.isAlive == true) log.warn("Output reader error", e)
+                log.warn("kiro-cli execution failed", e)
+                onChunk("Error: ${e.message}")
+                future.completeExceptionally(e)
             }
-        }, "kiro-cli-output").apply { isDaemon = true }.start()
-    }
+        }, "kiro-cli-send").apply { isDaemon = true }.start()
 
-    fun send(message: String) {
-        try {
-            writer?.write(message)
-            writer?.newLine()
-            writer?.flush()
-        } catch (e: Exception) {
-            log.warn("Failed to send message", e)
-        }
-    }
-
-    fun sendAndCollect(message: String): CompletableFuture<String> {
-        val future = CompletableFuture<String>()
-        val responseBuffer = StringBuilder()
-        var collecting = false
-        var idleCount = 0
-
-        val prevHandler = onOutput
-        onOutput = { chunk ->
-            responseBuffer.append(chunk)
-            collecting = true
-            idleCount = 0
-        }
-
-        // 타임아웃 체크 스레드: 출력이 2초간 없으면 완료로 간주
-        Thread({
-            Thread.sleep(500) // 초기 대기
-            while (collecting || idleCount < 4) {
-                Thread.sleep(500)
-                if (collecting && responseBuffer.isNotEmpty()) {
-                    idleCount++
-                    if (idleCount >= 4) { // 2초간 추가 출력 없음
-                        break
-                    }
-                }
-                collecting = false
-            }
-            onOutput = prevHandler
-            future.complete(responseBuffer.toString().trim())
-        }, "kiro-response-collector").apply { isDaemon = true }.start()
-
-        send(message)
         return future
     }
 
     fun stop() {
-        try {
-            writer?.close()
-        } catch (_: Exception) {}
-        process?.destroyForcibly()
-        process = null
-        writer = null
+        // 프로세스는 매번 종료되므로 별도 정리 불필요
     }
 
     companion object {
@@ -117,7 +83,8 @@ class KiroCliProcess(private val project: Project) {
                 .replace("\r", "")
                 .lines()
                 .filter { line ->
-                    !line.trim().startsWith("▸ Time:") && line.trim() != ">"
+                    val t = line.trim()
+                    !t.startsWith("▸ Time:") && t != ">"
                 }
                 .joinToString("\n")
                 .trim()

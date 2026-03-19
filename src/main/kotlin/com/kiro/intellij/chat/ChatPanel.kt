@@ -21,17 +21,17 @@ class ChatPanel(
 
     private val mainPanel = JPanel(BorderLayout())
     private val messages = mutableListOf<ChatMessage>()
-    private var cliProcess: KiroCliProcess? = null
+    private val cliProcess = KiroCliProcess(project)
     private var browser: JBCefBrowser? = null
     private var sendQuery: JBCefJSQuery? = null
-    private var isLoaded = false
+    private var isSending = false
 
     val component: JComponent get() = mainPanel
 
     init {
         Disposer.register(parentDisposable, this)
+        cliProcess.model = KiroSettings.getInstance().state.defaultModel
         initBrowser()
-        startProcess()
     }
 
     private fun initBrowser() {
@@ -47,9 +47,8 @@ class ChatPanel(
             }
 
             b.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
-                override fun onLoadEnd(browser: CefBrowser?, frame: org.cef.browser.CefFrame?, httpStatusCode: Int) {
+                override fun onLoadEnd(cefBrowser: CefBrowser?, frame: org.cef.browser.CefFrame?, httpStatusCode: Int) {
                     if (frame?.isMain == true) {
-                        isLoaded = true
                         injectSendFunction()
                     }
                 }
@@ -61,64 +60,52 @@ class ChatPanel(
     }
 
     private fun injectSendFunction() {
-        val js = """
-            window._sendToKotlin = function(msg) {
-                ${sendQuery?.inject("msg")}
-            };
-        """.trimIndent()
+        val js = "window._sendToKotlin = function(msg) { ${sendQuery?.inject("msg")} };"
         browser?.cefBrowser?.executeJavaScript(js, "", 0)
-    }
-
-    private fun startProcess() {
-        val settings = KiroSettings.getInstance().state
-        cliProcess = KiroCliProcess(project).apply {
-            start(settings.defaultModel) { chunk ->
-                ApplicationManager.getApplication().invokeLater {
-                    appendAssistantChunk(chunk)
-                }
-            }
-        }
     }
 
     private fun handleUserInput(message: String) {
-        if (message.isBlank()) return
-        val msg = ChatMessage(ChatMessage.Role.USER, message.trim())
-        messages.add(msg)
-        renderMessage(msg)
-        cliProcess?.send(message.trim())
-        // 새 assistant 메시지 시작
-        messages.add(ChatMessage(ChatMessage.Role.ASSISTANT, ""))
-        renderMessage(messages.last())
-    }
+        if (message.isBlank() || isSending) return
+        isSending = true
 
-    private fun appendAssistantChunk(chunk: String) {
-        val last = messages.lastOrNull()
-        if (last?.role == ChatMessage.Role.ASSISTANT) {
-            val updated = last.copy(content = last.content + chunk)
-            messages[messages.lastIndex] = updated
-            updateLastMessage(updated.content)
-        } else {
-            val msg = ChatMessage(ChatMessage.Role.ASSISTANT, chunk)
-            messages.add(msg)
-            renderMessage(msg)
+        val userMsg = ChatMessage(ChatMessage.Role.USER, message.trim())
+        messages.add(userMsg)
+        execJs("addMessage('user', '${escapeJs(userMsg.content)}')")
+        execJs("setInputEnabled(false)")
+
+        // assistant placeholder
+        messages.add(ChatMessage(ChatMessage.Role.ASSISTANT, ""))
+        execJs("addMessage('assistant', '')")
+
+        cliProcess.sendMessage(message.trim()) { chunk ->
+            ApplicationManager.getApplication().invokeLater {
+                val last = messages.lastOrNull()
+                if (last?.role == ChatMessage.Role.ASSISTANT) {
+                    val updated = last.copy(content = last.content + chunk)
+                    messages[messages.lastIndex] = updated
+                    execJs("updateLastMessage('${escapeJs(updated.content)}')")
+                }
+            }
+        }.thenAccept {
+            ApplicationManager.getApplication().invokeLater {
+                isSending = false
+                execJs("setInputEnabled(true)")
+            }
+        }.exceptionally { e ->
+            ApplicationManager.getApplication().invokeLater {
+                isSending = false
+                execJs("setInputEnabled(true)")
+                execJs("updateLastMessage('Error: ${escapeJs(e.message ?: "unknown error")}')")
+            }
+            null
         }
     }
 
-    private fun renderMessage(msg: ChatMessage) {
-        val escaped = escapeJs(msg.content)
-        val role = msg.role.name.lowercase()
-        val js = "addMessage('$role', '$escaped');"
-        browser?.cefBrowser?.executeJavaScript(js, "", 0)
-    }
-
-    private fun updateLastMessage(content: String) {
-        val escaped = escapeJs(content)
-        val js = "updateLastMessage('$escaped');"
-        browser?.cefBrowser?.executeJavaScript(js, "", 0)
-    }
-
     fun sendToChat(text: String) {
-        val js = "document.getElementById('input').value = ${escapeJs(text).let { "'$it'" }}; sendMessage();"
+        execJs("document.getElementById('input').value = '${escapeJs(text)}'")
+    }
+
+    private fun execJs(js: String) {
         browser?.cefBrowser?.executeJavaScript(js, "", 0)
     }
 
@@ -172,29 +159,29 @@ body {
     min-height: 36px; max-height: 120px;
 }
 #input:focus { outline: none; border-color: #007acc; }
+#input:disabled { opacity: 0.5; }
 #send-btn {
     background: #007acc; color: #fff; border: none; border-radius: 8px;
     padding: 8px 16px; cursor: pointer; font-size: 13px; align-self: flex-end;
 }
 #send-btn:hover { background: #005a9e; }
-.typing::after {
-    content: '●●●'; animation: blink 1s infinite;
-}
+#send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.typing::after { content: '●●●'; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
 </style>
 </head>
 <body>
 <div id="messages"></div>
 <div id="input-area">
-    <textarea id="input" rows="1" placeholder="메시지를 입력하세요..." 
+    <textarea id="input" rows="1" placeholder="메시지를 입력하세요..."
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
     <button id="send-btn" onclick="sendMessage()">전송</button>
 </div>
 <script>
 const messagesDiv = document.getElementById('messages');
 const input = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
 
-// auto-resize textarea
 input.addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 120) + 'px';
@@ -202,7 +189,7 @@ input.addEventListener('input', function() {
 
 function sendMessage() {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text || input.disabled) return;
     input.value = '';
     input.style.height = 'auto';
     if (window._sendToKotlin) window._sendToKotlin(text);
@@ -211,7 +198,6 @@ function sendMessage() {
 function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = 'msg ' + role;
-    div.id = 'msg-' + messagesDiv.children.length;
     if (role === 'assistant' && !text) {
         div.innerHTML = '<span class="typing"></span>';
     } else if (role === 'assistant') {
@@ -226,9 +212,19 @@ function addMessage(role, text) {
 function updateLastMessage(text) {
     const last = messagesDiv.lastElementChild;
     if (last && last.classList.contains('assistant')) {
-        last.innerHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
+        if (text) {
+            last.innerHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
+        } else {
+            last.innerHTML = '<span class="typing"></span>';
+        }
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
+}
+
+function setInputEnabled(enabled) {
+    input.disabled = !enabled;
+    sendBtn.disabled = !enabled;
+    if (enabled) input.focus();
 }
 </script>
 </body>
@@ -237,7 +233,6 @@ function updateLastMessage(text) {
     }
 
     override fun dispose() {
-        cliProcess?.stop()
-        cliProcess = null
+        cliProcess.stop()
     }
 }
