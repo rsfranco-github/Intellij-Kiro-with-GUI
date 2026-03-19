@@ -3,26 +3,28 @@ package com.kiro.intellij.toolwindow
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
-import com.intellij.terminal.ui.TerminalWidget
 import com.intellij.ui.components.JBLabel
 import com.kiro.intellij.settings.KiroSettings
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
+import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import java.awt.BorderLayout
 import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-class KiroChatPanel(private val project: Project) : Disposable {
+class KiroChatPanel(private val project: Project, private val parentDisposable: Disposable) : Disposable {
 
     private val models = arrayOf("Auto", "claude-opus-4.6", "claude-opus-4.5", "claude-sonnet-4.5", "claude-sonnet-4.0", "claude-haiku-4.5")
     private val modelCombo = JComboBox(models)
     private val mainPanel = JPanel(BorderLayout())
-    private var terminalWidget: TerminalWidget? = null
+    private var shellWidget: ShellTerminalWidget? = null
 
     val component: JComponent get() = mainPanel
 
     init {
+        Disposer.register(parentDisposable, this)
+
         val settings = KiroSettings.getInstance().state
         modelCombo.selectedItem = settings.defaultModel
         modelCombo.addActionListener { onModelChanged() }
@@ -47,8 +49,11 @@ class KiroChatPanel(private val project: Project) : Disposable {
                 .shellCommand(command)
                 .workingDirectory(workingDir)
                 .build()
-            val widget = runner.startShellTerminalWidget(this, options, false)
-            terminalWidget = widget
+            val widget = runner.startShellTerminalWidget(parentDisposable, options, false)
+            
+            // ShellTerminalWidget으로 캐스팅 시도
+            shellWidget = widget as? ShellTerminalWidget
+            
             mainPanel.add(widget.component, BorderLayout.CENTER)
             mainPanel.revalidate()
         } catch (e: Exception) {
@@ -62,11 +67,10 @@ class KiroChatPanel(private val project: Project) : Disposable {
 
     private fun onModelChanged() {
         val model = modelCombo.selectedItem as? String ?: return
-        val widget = terminalWidget ?: return
-        widget.sendCommandToExecute("/model $model")
+        shellWidget?.executeCommand("/model $model")
     }
 
     override fun dispose() {
-        terminalWidget?.let { Disposer.dispose(it) }
+        shellWidget = null
     }
 }

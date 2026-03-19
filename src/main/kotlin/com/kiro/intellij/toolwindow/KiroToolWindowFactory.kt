@@ -7,7 +7,7 @@ import com.intellij.ui.content.ContentFactory
 
 class KiroToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val chatPanel = KiroChatPanel(project)
+        val chatPanel = KiroChatPanel(project, toolWindow.disposable)
         val content = ContentFactory.getInstance().createContent(chatPanel.component, "Chat", false)
         toolWindow.contentManager.addContent(content)
     }
