@@ -13,7 +13,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Kiro"
-                    anchor="bottom"
+                    anchor="right"
                     factoryClass="com.kiro.intellij.toolwindow.KiroToolWindowFactory"
                     icon="/icons/kiro.svg"/>
         <applicationService
