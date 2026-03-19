@@ -3,6 +3,7 @@ package com.kiro.intellij.toolwindow
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.Key
 import com.intellij.ui.components.JBLabel
 import com.kiro.intellij.settings.KiroSettings
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
@@ -14,6 +15,10 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 
 class KiroChatPanel(private val project: Project, private val parentDisposable: Disposable) : Disposable {
+
+    companion object {
+        val KEY = Key.create<KiroChatPanel>("KiroChatPanel")
+    }
 
     private val models = arrayOf("Auto", "claude-opus-4.6", "claude-opus-4.5", "claude-sonnet-4.5", "claude-sonnet-4.0", "claude-haiku-4.5")
     private val modelCombo = JComboBox(models)
@@ -50,10 +55,7 @@ class KiroChatPanel(private val project: Project, private val parentDisposable: 
                 .workingDirectory(workingDir)
                 .build()
             val widget = runner.startShellTerminalWidget(parentDisposable, options, false)
-            
-            // ShellTerminalWidget으로 캐스팅 시도
             shellWidget = widget as? ShellTerminalWidget
-            
             mainPanel.add(widget.component, BorderLayout.CENTER)
             mainPanel.revalidate()
         } catch (e: Exception) {
@@ -65,9 +67,13 @@ class KiroChatPanel(private val project: Project, private val parentDisposable: 
         }
     }
 
+    fun sendToTerminal(text: String) {
+        shellWidget?.executeCommand(text)
+    }
+
     private fun onModelChanged() {
         val model = modelCombo.selectedItem as? String ?: return
-        shellWidget?.executeCommand("/model $model")
+        sendToTerminal("/model $model")
     }
 
     override fun dispose() {

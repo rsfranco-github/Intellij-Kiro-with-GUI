@@ -9,6 +9,7 @@ class KiroToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val chatPanel = KiroChatPanel(project, toolWindow.disposable)
         val content = ContentFactory.getInstance().createContent(chatPanel.component, "Chat", false)
+        content.putUserData(KiroChatPanel.KEY, chatPanel)
         toolWindow.contentManager.addContent(content)
     }
 }

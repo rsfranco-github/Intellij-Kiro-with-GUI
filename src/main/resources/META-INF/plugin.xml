@@ -31,5 +31,19 @@
                 description="Open Kiro chat window">
             <keyboard-shortcut first-keystroke="meta ESCAPE" keymap="$default"/>
         </action>
+        <action id="Kiro.SendSelection"
+                class="com.kiro.intellij.actions.SendSelectionAction"
+                text="Send Selection to Kiro"
+                description="Send selected text to Kiro chat">
+            <keyboard-shortcut first-keystroke="meta shift K" keymap="$default"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="Kiro.InsertFileRef"
+                class="com.kiro.intellij.actions.InsertFileRefAction"
+                text="Insert File Reference to Kiro"
+                description="Insert @File#Line reference into Kiro chat">
+            <keyboard-shortcut first-keystroke="meta alt K" keymap="$default"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
