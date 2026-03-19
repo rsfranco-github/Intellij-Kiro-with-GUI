@@ -203,11 +203,11 @@ class KiroManagePanel(private val project: Project, private val parentDisposable
     }
 
     private fun sendKiroCommand(command: String) {
-        // KiroChatPanel을 통해 터미널에 명령 전송
         val toolWindow = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Kiro")
-        val content = toolWindow?.contentManager?.getContent(0)
-        val chatPanel = content?.getUserData(KiroChatPanel.KEY)
-        chatPanel?.sendToTerminal(command)
+        if (toolWindow != null) {
+            val chatPanel = com.kiro.intellij.actions.KiroToolWindowUtil.getActiveChatPanel(toolWindow)
+            chatPanel?.sendToChat(command)
+        }
     }
 
     override fun dispose() {}

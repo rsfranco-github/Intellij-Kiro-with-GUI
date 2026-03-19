@@ -22,8 +22,8 @@ class SendSelectionAction : AnAction() {
 
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Kiro") ?: return
         toolWindow.show {
-            val chatPanel = KiroToolWindowUtil.getChatPanel(toolWindow) ?: return@show
-            chatPanel.sendToTerminal(text)
+            val chatPanel = KiroToolWindowUtil.getActiveChatPanel(toolWindow) ?: return@show
+            chatPanel.sendToChat(text)
         }
     }
 

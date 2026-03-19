@@ -25,8 +25,8 @@ class InsertFileRefAction : AnAction() {
 
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Kiro") ?: return
         toolWindow.show {
-            val chatPanel = KiroToolWindowUtil.getChatPanel(toolWindow) ?: return@show
-            chatPanel.sendToTerminal(ref)
+            val chatPanel = KiroToolWindowUtil.getActiveChatPanel(toolWindow) ?: return@show
+            chatPanel.sendToChat(ref)
         }
     }
 
