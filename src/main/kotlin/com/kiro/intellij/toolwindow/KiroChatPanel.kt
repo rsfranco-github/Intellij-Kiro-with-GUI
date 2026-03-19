@@ -1,10 +1,12 @@
 package com.kiro.intellij.toolwindow
 
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.ui.components.JBLabel
+import com.kiro.intellij.mcp.McpServer
 import com.kiro.intellij.settings.KiroSettings
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
@@ -18,12 +20,14 @@ class KiroChatPanel(private val project: Project, private val parentDisposable: 
 
     companion object {
         val KEY = Key.create<KiroChatPanel>("KiroChatPanel")
+        private val log = Logger.getInstance(KiroChatPanel::class.java)
     }
 
     private val models = arrayOf("Auto", "claude-opus-4.6", "claude-opus-4.5", "claude-sonnet-4.5", "claude-sonnet-4.0", "claude-haiku-4.5")
     private val modelCombo = JComboBox(models)
     private val mainPanel = JPanel(BorderLayout())
     private var shellWidget: ShellTerminalWidget? = null
+    private var mcpServer: McpServer? = null
 
     val component: JComponent get() = mainPanel
 
@@ -40,7 +44,20 @@ class KiroChatPanel(private val project: Project, private val parentDisposable: 
         }
         mainPanel.add(toolbar, BorderLayout.NORTH)
 
+        startMcpServer()
         startTerminal()
+    }
+
+    private fun startMcpServer() {
+        try {
+            mcpServer = McpServer(project, parentDisposable).apply {
+                start()
+                registerWithKiro()
+            }
+            log.info("MCP IDE server started on port ${mcpServer?.port}")
+        } catch (e: Exception) {
+            log.warn("Failed to start MCP server", e)
+        }
     }
 
     private fun startTerminal() {
@@ -78,5 +95,6 @@ class KiroChatPanel(private val project: Project, private val parentDisposable: 
 
     override fun dispose() {
         shellWidget = null
+        mcpServer = null
     }
 }
