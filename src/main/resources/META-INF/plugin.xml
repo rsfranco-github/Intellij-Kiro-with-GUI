@@ -1,0 +1,20 @@
+<idea-plugin>
+    <id>com.kiro.intellij</id>
+    <name>Kiro with GUI</name>
+    <vendor>Kiro Community</vendor>
+    <description><![CDATA[
+        Kiro CLI integration with GUI for JetBrains IDEs.
+        Provides an embedded terminal for kiro-cli with IDE features like diff viewing,
+        selection context sharing, diagnostic sharing, and MCP/Skill management.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Kiro"
+                    anchor="bottom"
+                    factoryClass="com.kiro.intellij.toolwindow.KiroToolWindowFactory"
+                    icon="/icons/kiro.svg"/>
+    </extensions>
+</idea-plugin>
