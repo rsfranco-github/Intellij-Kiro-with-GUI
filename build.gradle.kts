@@ -49,7 +49,7 @@ tasks.named("runIde") {
 
 intellijPlatform {
     pluginConfiguration {
-        id = "com.kiro.intellij"
+        id = "com.kiro.gui"
         name = "Kiro with GUI"
         version = providers.gradleProperty("pluginVersion")
         ideaVersion {
