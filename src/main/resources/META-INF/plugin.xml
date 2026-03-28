@@ -1,12 +1,42 @@
 <idea-plugin>
     <id>com.kiro.intellij</id>
     <name>Kiro with GUI</name>
-    <vendor>Kiro Community</vendor>
+    <vendor email="elsboo.dev@gmail.com" url="https://github.com/elsboo">elsboo</vendor>
     <description><![CDATA[
-        Kiro CLI integration with GUI for JetBrains IDEs.
-        Provides an embedded terminal for kiro-cli with IDE features like diff viewing,
-        selection context sharing, diagnostic sharing, and MCP/Skill management.
+        <p>A rich GUI plugin that integrates <a href="https://kiro.dev">Kiro CLI</a> into JetBrains IDEs.</p>
+        <p>Chat with Kiro directly inside your IDE through a JCEF-based chat interface with Markdown rendering, code highlighting, and multi-session tabs.</p>
+
+        <h3>Features</h3>
+        <ul>
+            <li><b>Chat UI</b> — Embedded chat with Markdown/code rendering, multi-tab sessions, model selection</li>
+            <li><b>IDE Context</b> — Send editor selections, insert @File#Line references, share diagnostics</li>
+            <li><b>Diff Viewer</b> — Review file changes proposed by Kiro using the IDE's built-in diff viewer</li>
+            <li><b>MCP Server Management</b> — View, add, remove, and toggle MCP servers from mcp.json</li>
+            <li><b>Skills &amp; Agent Management</b> — Browse available tools, switch or create agents</li>
+            <li><b>Multi-language</b> — Korean and English UI support</li>
+        </ul>
+
+        <h3>Requirements</h3>
+        <ul>
+            <li>JetBrains IDE 2025.1+</li>
+            <li><a href="https://kiro.dev/docs/cli/">kiro-cli</a> installed and authenticated</li>
+        </ul>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <h3>0.1.0</h3>
+        <ul>
+            <li>Initial release</li>
+            <li>JCEF-based chat UI with Markdown rendering and code highlighting</li>
+            <li>Multi-session tab support</li>
+            <li>IDE context sharing (selection, file references, diagnostics)</li>
+            <li>Diff viewer integration for file change proposals</li>
+            <li>MCP server management panel</li>
+            <li>Skills and Agent management</li>
+            <li>Automatic PATH resolution for macOS GUI environments</li>
+            <li>Korean and English localization</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.terminal</depends>
@@ -18,6 +48,8 @@
                     icon="/icons/kiro.svg"/>
         <applicationService
                     serviceImplementation="com.kiro.intellij.settings.KiroSettings"/>
+        <projectService
+                    serviceImplementation="com.kiro.intellij.settings.KiroProjectSettings"/>
         <applicationConfigurable
                     instance="com.kiro.intellij.settings.KiroSettingsConfigurable"
                     displayName="Kiro"

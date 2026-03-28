@@ -4,211 +4,143 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
-import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.table.JBTable
-import com.kiro.intellij.settings.KiroSettings
-import kotlinx.serialization.json.*
-import java.awt.BorderLayout
-import java.io.File
+import com.intellij.ui.JBColor
+import com.intellij.util.ui.JBUI
+import java.awt.*
 import javax.swing.*
-import javax.swing.table.DefaultTableModel
 
+/**
+ * 관리 패널 - 좌측 아이콘 네비게이션 + 우측 콘텐츠 레이아웃
+ * JetBrains UI 가이드라인 준수
+ */
 class KiroManagePanel(private val project: Project, private val parentDisposable: Disposable) : Disposable {
 
     companion object {
         val KEY = Key.create<KiroManagePanel>("KiroManagePanel")
     }
 
-    private val tabbedPane = JTabbedPane()
-    val component: JComponent get() = tabbedPane
+    private val mainPanel = JPanel(BorderLayout())
+    private val contentPanel = JPanel(CardLayout())
+    private val navButtons = mutableListOf<NavButton>()
+    
+    private val authPanel = AuthPanel(project)
+    private val settingsPanel = SettingsPanel(project)
+    private val mcpPanel = McpPanel(project)
+    private val skillsPanel = SkillsPanel(project)
+    private val agentPanel = AgentPanel(project)
+
+    val component: JComponent get() = mainPanel
 
     init {
         Disposer.register(parentDisposable, this)
-        tabbedPane.addTab("MCP", createMcpPanel())
-        tabbedPane.addTab("Skills", createSkillsPanel())
-        tabbedPane.addTab("Agent", createAgentPanel())
-    }
-
-    // --- MCP Tab ---
-    private fun createMcpPanel(): JComponent {
-        val panel = JPanel(BorderLayout())
-        val tableModel = DefaultTableModel(arrayOf("Name", "Command", "Scope"), 0)
-        val table = JBTable(tableModel)
-
-        // mcp.json 읽기
-        loadMcpServers(tableModel)
-
-        val buttonPanel = JPanel().apply {
-            add(JButton("Refresh").apply { addActionListener { loadMcpServers(tableModel) } })
-            add(JButton("Add...").apply { addActionListener { addMcpServer(tableModel) } })
-            add(JButton("Remove").apply { addActionListener { removeMcpServer(table, tableModel) } })
-            add(JButton("Edit mcp.json").apply { addActionListener { openMcpJson() } })
-        }
-
-        panel.add(JBScrollPane(table), BorderLayout.CENTER)
-        panel.add(buttonPanel, BorderLayout.SOUTH)
-        return panel
-    }
-
-    private fun loadMcpServers(tableModel: DefaultTableModel) {
-        tableModel.rowCount = 0
-        for ((scope, file) in getMcpJsonFiles()) {
-            if (!file.exists()) continue
-            try {
-                val root = Json.parseToJsonElement(file.readText()).jsonObject
-                val servers = root["mcpServers"]?.jsonObject ?: continue
-                for ((name, config) in servers) {
-                    val command = config.jsonObject["command"]?.jsonPrimitive?.content ?: ""
-                    val args = config.jsonObject["args"]?.jsonArray?.joinToString(" ") { it.jsonPrimitive.content } ?: ""
-                    tableModel.addRow(arrayOf(name, "$command $args".trim(), scope))
-                }
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun addMcpServer(tableModel: DefaultTableModel) {
-        val name = JOptionPane.showInputDialog(tabbedPane, "Server name:") ?: return
-        val command = JOptionPane.showInputDialog(tabbedPane, "Command (e.g. node server.js):") ?: return
-        if (name.isBlank() || command.isBlank()) return
-
-        try {
-            val pb = ProcessBuilder(
-                KiroSettings.getInstance().state.kiroCommand, "mcp", "add",
-                "--name", name, "--command", command, "--scope", "workspace", "--force"
-            ).directory(project.basePath?.let { File(it) }).redirectErrorStream(true)
-            val proc = pb.start()
-            proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
-            loadMcpServers(tableModel)
-        } catch (_: Exception) {}
-    }
-
-    private fun removeMcpServer(table: JBTable, tableModel: DefaultTableModel) {
-        val row = table.selectedRow
-        if (row < 0) return
-        val name = tableModel.getValueAt(row, 0) as String
-        val scope = tableModel.getValueAt(row, 2) as String
-
-        try {
-            val pb = ProcessBuilder(
-                KiroSettings.getInstance().state.kiroCommand, "mcp", "remove",
-                "--name", name, "--scope", scope
-            ).directory(project.basePath?.let { File(it) }).redirectErrorStream(true)
-            val proc = pb.start()
-            proc.waitFor()
-            loadMcpServers(tableModel)
-        } catch (_: Exception) {}
-    }
-
-    private fun openMcpJson() {
-        for ((_, file) in getMcpJsonFiles()) {
-            if (file.exists()) {
-                val vFile = com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByIoFile(file)
-                if (vFile != null) {
-                    com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).openFile(vFile, true)
-                    return
-                }
+        // AuthPanel에서 설정 탭으로 이동하는 콜백 연결
+        authPanel.onNavigateToSettings = { selectNav("settings") }
+        setupUI()
+        
+        // 관리 탭이 보일 때마다 인증 상태 자동 갱신
+        mainPanel.addHierarchyListener { e ->
+            if ((e.changeFlags and java.awt.event.HierarchyEvent.SHOWING_CHANGED.toLong()) != 0L && mainPanel.isShowing) {
+                authPanel.refreshAuthStatus()
             }
         }
     }
 
-    private fun getMcpJsonFiles(): List<Pair<String, File>> {
-        val workspace = project.basePath?.let { File(it, ".kiro/settings/mcp.json") }
-        val global = File(System.getProperty("user.home"), ".kiro/settings/mcp.json")
-        return listOfNotNull(
-            workspace?.let { "workspace" to it },
-            "global" to global
-        )
-    }
-
-    // --- Skills Tab ---
-    private fun createSkillsPanel(): JComponent {
-        val panel = JPanel(BorderLayout())
-        val tableModel = DefaultTableModel(arrayOf("Tool", "Permission"), 0)
-        val table = JBTable(tableModel)
-
-        val buttonPanel = JPanel().apply {
-            add(JButton("Refresh").apply { addActionListener { refreshSkills(tableModel) } })
-            add(JButton("Trust").apply {
-                addActionListener {
-                    val row = table.selectedRow
-                    if (row >= 0) {
-                        val tool = tableModel.getValueAt(row, 0) as String
-                        sendKiroCommand("/tools trust $tool")
-                        tableModel.setValueAt("Trusted", row, 1)
-                    }
-                }
-            })
-            add(JButton("Untrust").apply {
-                addActionListener {
-                    val row = table.selectedRow
-                    if (row >= 0) {
-                        val tool = tableModel.getValueAt(row, 0) as String
-                        sendKiroCommand("/tools untrust $tool")
-                        tableModel.setValueAt("Ask", row, 1)
-                    }
-                }
-            })
+    private fun setupUI() {
+        // 좌측 네비게이션 (아이콘만)
+        val navPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            background = KiroUI.Colors.navBackground
+            border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 0, 1)
+            preferredSize = Dimension(JBUI.scale(44), 0) // 아이콘만이므로 좁게
         }
 
-        panel.add(JBScrollPane(table), BorderLayout.CENTER)
-        panel.add(buttonPanel, BorderLayout.SOUTH)
-        panel.add(JBLabel("Use Refresh to load tools from active kiro-cli session"), BorderLayout.NORTH)
-        return panel
-    }
-
-    private fun refreshSkills(tableModel: DefaultTableModel) {
-        tableModel.rowCount = 0
-        tableModel.addRow(arrayOf("(Use /tools in Kiro chat to see tools)", ""))
-    }
-
-    // --- Agent Tab ---
-    private fun createAgentPanel(): JComponent {
-        val panel = JPanel(BorderLayout())
-        val agentList = DefaultListModel<String>()
-        val list = JList(agentList)
-
-        loadAgents(agentList)
-
-        val buttonPanel = JPanel().apply {
-            add(JButton("Refresh").apply { addActionListener { loadAgents(agentList) } })
-            add(JButton("Swap").apply {
-                addActionListener {
-                    val selected = list.selectedValue ?: return@addActionListener
-                    sendKiroCommand("/agent swap $selected")
-                }
-            })
-        }
-
-        panel.add(JBScrollPane(list), BorderLayout.CENTER)
-        panel.add(buttonPanel, BorderLayout.SOUTH)
-        return panel
-    }
-
-    private fun loadAgents(model: DefaultListModel<String>) {
-        model.clear()
-        // ~/.kiro/agents/ 와 .kiro/agents/ 스캔
-        val dirs = listOfNotNull(
-            project.basePath?.let { File(it, ".kiro/agents") },
-            File(System.getProperty("user.home"), ".kiro/agents")
+        // AllIcons 사용 + 다국어 툴팁
+        val navItems = listOf(
+            NavItem("auth", KiroMessages["nav.auth"], KiroUI.Icons.auth, authPanel.component),
+            NavItem("settings", KiroMessages["nav.settings"], KiroUI.Icons.settings, settingsPanel.component),
+            NavItem("mcp", KiroMessages["nav.mcp"], KiroUI.Icons.mcp, mcpPanel.component),
+            NavItem("skills", KiroMessages["nav.skills"], KiroUI.Icons.skills, skillsPanel.component),
+            NavItem("agent", KiroMessages["nav.agent"], KiroUI.Icons.agent, agentPanel.component)
         )
-        for (dir in dirs) {
-            if (!dir.isDirectory) continue
-            dir.listFiles { f -> f.extension == "json" }?.forEach { f ->
-                model.addElement(f.nameWithoutExtension)
+
+        navItems.forEach { item ->
+            contentPanel.add(item.panel, item.id)
+            val btn = NavButton(item.icon, item.tooltip) {
+                selectNav(item.id)
             }
+            navButtons.add(btn)
+            navPanel.add(btn)
         }
-        if (model.isEmpty) model.addElement("(default)")
+        navPanel.add(Box.createVerticalGlue())
+
+        // 첫 번째 항목 선택
+        selectNav("auth")
+
+        mainPanel.add(navPanel, BorderLayout.WEST)
+        mainPanel.add(contentPanel, BorderLayout.CENTER)
     }
 
-    private fun sendKiroCommand(command: String) {
-        val toolWindow = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("Kiro")
-        if (toolWindow != null) {
-            val chatPanel = com.kiro.intellij.actions.KiroToolWindowUtil.getActiveChatPanel(toolWindow)
-            chatPanel?.sendToChat(command)
+    private fun selectNav(id: String) {
+        val layout = contentPanel.layout as CardLayout
+        layout.show(contentPanel, id)
+        
+        navButtons.forEachIndexed { index, btn ->
+            val navId = listOf("auth", "settings", "mcp", "skills", "agent")[index]
+            btn.setNavSelected(navId == id)
+        }
+        
+        // auth 탭 선택 시 인증 상태 자동 갱신
+        if (id == "auth") {
+            authPanel.refreshAuthStatus()
         }
     }
 
     override fun dispose() {}
+
+    private data class NavItem(val id: String, val tooltip: String, val icon: Icon, val panel: JComponent)
+
+    /**
+     * 네비게이션 버튼 - 아이콘만 표시, 호버 시 툴팁
+     */
+    private class NavButton(navIcon: Icon, tooltip: String, onClick: () -> Unit) : JButton() {
+        private var selected: Boolean = false
+
+        fun setNavSelected(value: Boolean) {
+            selected = value
+            updateStyle()
+        }
+
+        init {
+            setIcon(navIcon)
+            toolTipText = tooltip
+            horizontalAlignment = SwingConstants.CENTER
+            isFocusPainted = false
+            isBorderPainted = false
+            isContentAreaFilled = false
+            border = JBUI.Borders.empty(KiroUI.Spacing.medium)
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            preferredSize = Dimension(JBUI.scale(44), JBUI.scale(44))
+            maximumSize = Dimension(JBUI.scale(44), JBUI.scale(44))
+            minimumSize = Dimension(JBUI.scale(44), JBUI.scale(44))
+            addActionListener { onClick() }
+            updateStyle()
+        }
+
+        private fun updateStyle() {
+            background = if (selected) KiroUI.Colors.navSelectedBackground else KiroUI.Colors.navBackground
+            isOpaque = selected
+        }
+
+        override fun paintComponent(g: Graphics) {
+            if (selected) {
+                g.color = background
+                g.fillRect(0, 0, width, height)
+                
+                // 선택된 항목에 왼쪽 강조선
+                g.color = KiroUI.Colors.activeBorder
+                g.fillRect(0, 0, JBUI.scale(3), height)
+            }
+            super.paintComponent(g)
+        }
+    }
 }

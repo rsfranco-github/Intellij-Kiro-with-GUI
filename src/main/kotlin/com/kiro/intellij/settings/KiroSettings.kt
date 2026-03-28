@@ -13,7 +13,8 @@ class KiroSettings : PersistentStateComponent<KiroSettings.State> {
     data class State(
         var kiroCommand: String = "kiro-cli",
         var defaultModel: String = "Auto",
-        var autoStart: Boolean = true
+        var language: String = "ko", // ko, en
+        var kiroConfigDir: String = "" // 빈 문자열이면 기본 경로 (~/.kiro) 사용
     )
 
     private var myState = State()

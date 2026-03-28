@@ -1,0 +1,286 @@
+package com.kiro.intellij.toolwindow
+
+import com.kiro.intellij.settings.KiroSettings
+
+/**
+ * 다국어 메시지 지원
+ */
+object KiroMessages {
+    
+    private val ko = mapOf(
+        // 탭 이름
+        "tab.chat" to "채팅",
+        "tab.manage" to "관리",
+        
+        // Navigation
+        "nav.auth" to "인증",
+        "nav.settings" to "설정",
+        "nav.mcp" to "MCP",
+        "nav.skills" to "Skills",
+        "nav.agent" to "Agent",
+        
+        // Auth Panel
+        "auth.title" to "인증 상태",
+        "auth.currentStatus" to "현재 상태",
+        "auth.status" to "상태:",
+        "auth.checking" to "확인 중...",
+        "auth.loggedIn" to "로그인됨",
+        "auth.loginRequired" to "로그인 필요",
+        "auth.error" to "오류",
+        "auth.login" to "로그인",
+        "auth.logout" to "로그아웃",
+        "auth.loginPrompt" to "kiro-cli에 로그인하세요",
+        "auth.cliNotFound" to "kiro-cli를 찾을 수 없습니다",
+        "auth.cliNotFoundDesc" to "설정에서 kiro-cli 경로를 지정해주세요.",
+        "auth.goToSettings" to "설정으로 이동",
+        "auth.loginFailed" to "로그인 실패",
+        "auth.logoutFailed" to "로그아웃 실패",
+        "auth.welcome" to "Kiro에 오신 것을 환영합니다",
+        "auth.welcomeDesc" to "AI 기반 코딩 어시스턴트를 사용하려면 로그인하세요.",
+        "auth.features" to "주요 기능",
+        "auth.feature1" to "AI 채팅으로 코드 작성 및 리뷰",
+        "auth.feature2" to "MCP 서버를 통한 도구 확장",
+        "auth.feature3" to "커스텀 에이전트 생성",
+        
+        // Settings Panel
+        "settings.title" to "설정",
+        "settings.cliPath" to "kiro-cli 경로",
+        "settings.cliPathDesc" to "kiro-cli 실행 파일 경로 (기본: kiro-cli)",
+        "settings.configDir" to "Kiro 설정 디렉토리",
+        "settings.configDirDesc" to "mcp.json, agents 등이 저장되는 디렉토리",
+        "settings.configDirHint" to "비워두면 기본 경로(~/.kiro)를 사용합니다",
+        "settings.configDirCurrent" to "현재 경로:",
+        "settings.configDirDefault" to "(기본)",
+        "settings.defaultModel" to "기본 모델",
+        "settings.defaultModelDesc" to "새 채팅 세션에서 사용할 기본 모델",
+        "settings.language" to "언어",
+        "settings.languageDesc" to "UI 표시 언어 (변경 후 재시작 필요)",
+        "settings.save" to "저장",
+        "settings.reset" to "초기화",
+        "settings.openConfig" to "설정 파일 열기",
+        "settings.saved" to "설정이 저장되었습니다.",
+        "settings.saveComplete" to "저장 완료",
+        "settings.resetConfirm" to "설정을 초기화하시겠습니까?",
+        "settings.resetTitle" to "초기화 확인",
+        "settings.restartConfirm" to "언어 변경을 적용하려면 IDE를 재시작해야 합니다.\n지금 재시작하시겠습니까?",
+        "settings.restartTitle" to "재시작 필요",
+        "settings.configNotFound" to "설정 디렉토리가 없습니다",
+        "settings.cliNotFound" to "kiro-cli를 찾을 수 없습니다",
+        "settings.info" to "알림",
+        
+        // MCP Panel
+        "mcp.title" to "MCP 서버",
+        "mcp.addServer" to "서버 추가",
+        "mcp.add" to "추가",
+        "mcp.edit" to "편집",
+        "mcp.editJson" to "mcp.json 편집",
+        "mcp.workspace" to "워크스페이스",
+        "mcp.global" to "글로벌",
+        "mcp.parseError" to "mcp.json 파싱 오류",
+        "mcp.noServers" to "등록된 MCP 서버가 없습니다.",
+        "mcp.command" to "명령어",
+        "mcp.commandPrefix" to "명령어:",
+        "mcp.active" to "활성",
+        "mcp.inactive" to "비활성",
+        "mcp.activate" to "활성화",
+        "mcp.deactivate" to "비활성화",
+        "mcp.removeConfirm" to "서버를 제거하시겠습니까?",
+        "mcp.removeTitle" to "제거 확인",
+        "mcp.addFailed" to "서버 추가 실패",
+        "mcp.removeFailed" to "서버 제거 실패",
+        "mcp.toggleFailed" to "상태 변경 실패",
+        "mcp.notFound" to "mcp.json 파일을 찾을 수 없습니다.",
+        "mcp.name" to "이름:",
+        "mcp.commandLabel" to "명령어:",
+        "mcp.scope" to "범위:",
+        "mcp.addTitle" to "MCP 서버 추가",
+        "mcp.selectFile" to "편집할 mcp.json을 선택하세요:",
+        "mcp.selectTitle" to "mcp.json 선택",
+        "mcp.openFailed" to "파일을 열 수 없습니다:",
+        
+        // Skills Panel
+        "skills.title" to "Skills",
+        "skills.search" to "스킬 검색...",
+        "skills.hint" to "Kiro 채팅에서 /tools 명령으로 전체 도구 목록을 확인하세요",
+        "skills.noResults" to "검색 결과가 없습니다.",
+        "skills.provider" to "제공",
+        "skills.refreshHint" to "Kiro 채팅에서 /tools 명령을 실행하여 전체 도구 목록을 확인하세요.",
+        "skills.info" to "안내",
+        "skills.desc.getCurrentSelection" to "현재 에디터에서 선택된 텍스트를 가져옵니다",
+        "skills.desc.getOpenEditors" to "열려있는 에디터 파일 목록을 가져옵니다",
+        "skills.desc.getWorkspaceFolders" to "워크스페이스 폴더 목록을 가져옵니다",
+        "skills.desc.getDiagnostics" to "현재 파일의 에러/경고를 가져옵니다",
+        "skills.desc.openFile" to "지정된 파일을 에디터에서 엽니다",
+        "skills.desc.openDiff" to "두 파일의 차이를 diff viewer로 표시합니다",
+        
+        // Agent Panel
+        "agent.title" to "Agent",
+        "agent.create" to "생성",
+        "agent.currentActive" to "현재 활성 에이전트:",
+        "agent.noAgents" to "등록된 에이전트가 없습니다.",
+        "agent.active" to "활성",
+        "agent.switch" to "전환",
+        "agent.deleteConfirm" to "에이전트를 삭제하시겠습니까?",
+        "agent.deleteTitle" to "삭제 확인",
+        "agent.defaultDesc" to "기본 Kiro 에이전트",
+        "agent.customDesc" to "사용자 정의 에이전트",
+        "agent.nameLabel" to "이름:",
+        "agent.descLabel" to "설명:",
+        "agent.createTitle" to "새 에이전트 생성",
+        
+        // Chat Panel
+        "chat.placeholder" to "메시지를 입력하세요... (# 파일, @ 에이전트, / 커맨드)",
+        "chat.openFile" to "열린 파일",
+        "chat.systemLog" to "시스템 로그",
+        
+        // Common
+        "common.error" to "오류",
+        "common.refresh" to "새로고침",
+        "common.edit" to "편집",
+        "common.delete" to "삭제",
+        "common.remove" to "제거"
+    )
+    
+    private val en = mapOf(
+        // 탭 이름
+        "tab.chat" to "Chat",
+        "tab.manage" to "Manage",
+        
+        // Navigation
+        "nav.auth" to "Auth",
+        "nav.settings" to "Settings",
+        "nav.mcp" to "MCP",
+        "nav.skills" to "Skills",
+        "nav.agent" to "Agent",
+        
+        // Auth Panel
+        "auth.title" to "Authentication",
+        "auth.currentStatus" to "Current Status",
+        "auth.status" to "Status:",
+        "auth.checking" to "Checking...",
+        "auth.loggedIn" to "Logged In",
+        "auth.loginRequired" to "Login Required",
+        "auth.error" to "Error",
+        "auth.login" to "Login",
+        "auth.logout" to "Logout",
+        "auth.loginPrompt" to "Please login to kiro-cli",
+        "auth.cliNotFound" to "kiro-cli not found",
+        "auth.cliNotFoundDesc" to "Please set the kiro-cli path in Settings.",
+        "auth.goToSettings" to "Go to Settings",
+        "auth.loginFailed" to "Login failed",
+        "auth.logoutFailed" to "Logout failed",
+        "auth.welcome" to "Welcome to Kiro",
+        "auth.welcomeDesc" to "Login to use the AI-powered coding assistant.",
+        "auth.features" to "Key Features",
+        "auth.feature1" to "Write and review code with AI chat",
+        "auth.feature2" to "Extend tools via MCP servers",
+        "auth.feature3" to "Create custom agents",
+        
+        // Settings Panel
+        "settings.title" to "Settings",
+        "settings.cliPath" to "kiro-cli Path",
+        "settings.cliPathDesc" to "Path to kiro-cli executable (default: kiro-cli)",
+        "settings.configDir" to "Kiro Config Directory",
+        "settings.configDirDesc" to "Directory for mcp.json, agents, etc.",
+        "settings.configDirHint" to "Leave empty to use default path (~/.kiro)",
+        "settings.configDirCurrent" to "Current path:",
+        "settings.configDirDefault" to "(default)",
+        "settings.defaultModel" to "Default Model",
+        "settings.defaultModelDesc" to "Default model for new chat sessions",
+        "settings.language" to "Language",
+        "settings.languageDesc" to "UI display language (restart required after change)",
+        "settings.save" to "Save",
+        "settings.reset" to "Reset",
+        "settings.openConfig" to "Open Config File",
+        "settings.saved" to "Settings saved.",
+        "settings.saveComplete" to "Save Complete",
+        "settings.resetConfirm" to "Reset settings to defaults?",
+        "settings.resetTitle" to "Confirm Reset",
+        "settings.restartConfirm" to "IDE restart is required to apply language change.\nRestart now?",
+        "settings.restartTitle" to "Restart Required",
+        "settings.configNotFound" to "Config directory not found",
+        "settings.cliNotFound" to "kiro-cli not found",
+        "settings.info" to "Info",
+        
+        // MCP Panel
+        "mcp.title" to "MCP Servers",
+        "mcp.addServer" to "Add Server",
+        "mcp.add" to "Add",
+        "mcp.edit" to "Edit",
+        "mcp.editJson" to "Edit mcp.json",
+        "mcp.workspace" to "Workspace",
+        "mcp.global" to "Global",
+        "mcp.parseError" to "mcp.json parse error",
+        "mcp.noServers" to "No MCP servers registered.",
+        "mcp.command" to "Command",
+        "mcp.commandPrefix" to "Command:",
+        "mcp.active" to "Active",
+        "mcp.inactive" to "Inactive",
+        "mcp.activate" to "Activate",
+        "mcp.deactivate" to "Deactivate",
+        "mcp.removeConfirm" to "Remove this server?",
+        "mcp.removeTitle" to "Confirm Remove",
+        "mcp.addFailed" to "Failed to add server",
+        "mcp.removeFailed" to "Failed to remove server",
+        "mcp.toggleFailed" to "Failed to change status",
+        "mcp.notFound" to "mcp.json file not found.",
+        "mcp.name" to "Name:",
+        "mcp.commandLabel" to "Command:",
+        "mcp.scope" to "Scope:",
+        "mcp.addTitle" to "Add MCP Server",
+        "mcp.selectFile" to "Select mcp.json to edit:",
+        "mcp.selectTitle" to "Select mcp.json",
+        "mcp.openFailed" to "Cannot open file:",
+        
+        // Skills Panel
+        "skills.title" to "Skills",
+        "skills.search" to "Search skills...",
+        "skills.hint" to "Use /tools command in Kiro chat to see all available tools",
+        "skills.noResults" to "No results found.",
+        "skills.provider" to "Provider",
+        "skills.refreshHint" to "Use /tools command in Kiro chat to see all available tools.",
+        "skills.info" to "Info",
+        "skills.desc.getCurrentSelection" to "Get selected text from current editor",
+        "skills.desc.getOpenEditors" to "Get list of open editor files",
+        "skills.desc.getWorkspaceFolders" to "Get list of workspace folders",
+        "skills.desc.getDiagnostics" to "Get errors/warnings from current file",
+        "skills.desc.openFile" to "Open specified file in editor",
+        "skills.desc.openDiff" to "Show diff between two files in diff viewer",
+        
+        // Agent Panel
+        "agent.title" to "Agent",
+        "agent.create" to "Create",
+        "agent.currentActive" to "Current active agent:",
+        "agent.noAgents" to "No agents registered.",
+        "agent.active" to "Active",
+        "agent.switch" to "Switch",
+        "agent.deleteConfirm" to "Delete this agent?",
+        "agent.deleteTitle" to "Confirm Delete",
+        "agent.defaultDesc" to "Default Kiro agent",
+        "agent.customDesc" to "Custom agent",
+        "agent.nameLabel" to "Name:",
+        "agent.descLabel" to "Description:",
+        "agent.createTitle" to "Create New Agent",
+        
+        // Chat Panel
+        "chat.placeholder" to "Enter message... (# file, @ agent, / command)",
+        "chat.openFile" to "Open file",
+        "chat.systemLog" to "System log",
+        
+        // Common
+        "common.error" to "Error",
+        "common.refresh" to "Refresh",
+        "common.edit" to "Edit",
+        "common.delete" to "Delete",
+        "common.remove" to "Remove"
+    )
+    
+    operator fun get(key: String): String {
+        val lang = KiroSettings.getInstance().state.language
+        val messages = if (lang == "en") en else ko
+        return messages[key] ?: key
+    }
+    
+    // 편의 함수
+    operator fun invoke(key: String) = get(key)
+}

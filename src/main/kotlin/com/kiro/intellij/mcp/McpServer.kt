@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.kiro.intellij.settings.KiroCliResolver
 import kotlinx.serialization.json.*
 import java.io.*
 import java.net.ServerSocket
@@ -51,23 +52,28 @@ class McpServer(private val project: Project, parentDisposable: Disposable) : Di
     fun startBridge() {
         // bridge 스크립트 추출
         val bridgeScript = extractBridgeScript()
-        val pb = ProcessBuilder("node", bridgeScript.absolutePath, port.toString())
+        val nodePath = KiroCliResolver.resolveCommand("node")
+        val pb = ProcessBuilder(nodePath, bridgeScript.absolutePath, port.toString())
             .redirectErrorStream(true)
+        KiroCliResolver.configureProcessBuilder(pb)
         bridgeProcess = pb.start()
         log.info("MCP bridge started, connecting to port $port")
     }
 
     fun registerWithKiro() {
         val bridgeScript = extractBridgeScript()
-        val command = "node ${bridgeScript.absolutePath} $port"
+        val nodePath = KiroCliResolver.resolveCommand("node")
+        val command = "$nodePath ${bridgeScript.absolutePath} $port"
         try {
-            val pb = ProcessBuilder("kiro-cli", "mcp", "add",
+            val cliPath = KiroCliResolver.resolveCommand("kiro-cli")
+            val pb = ProcessBuilder(cliPath, "mcp", "add",
                 "--name", "kiro-ide",
                 "--command", command,
                 "--scope", "workspace",
                 "--force")
                 .directory(project.basePath?.let { File(it) })
                 .redirectErrorStream(true)
+            KiroCliResolver.configureProcessBuilder(pb)
             val proc = pb.start()
             val output = proc.inputStream.bufferedReader().readText()
             proc.waitFor()
@@ -79,11 +85,13 @@ class McpServer(private val project: Project, parentDisposable: Disposable) : Di
 
     fun unregisterFromKiro() {
         try {
-            val pb = ProcessBuilder("kiro-cli", "mcp", "remove",
+            val cliPath = KiroCliResolver.resolveCommand("kiro-cli")
+            val pb = ProcessBuilder(cliPath, "mcp", "remove",
                 "--name", "kiro-ide",
                 "--scope", "workspace")
                 .directory(project.basePath?.let { File(it) })
                 .redirectErrorStream(true)
+            KiroCliResolver.configureProcessBuilder(pb)
             val proc = pb.start()
             proc.waitFor()
         } catch (e: Exception) {

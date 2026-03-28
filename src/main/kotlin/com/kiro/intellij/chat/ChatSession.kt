@@ -37,6 +37,11 @@ class ChatSession(
         )
     }
 
+    fun stopGeneration() {
+        cliProcess.stop()
+        streamWriter?.invoke("done", "")
+    }
+
     fun resetSession() {
         cliProcess.resetSession()
     }

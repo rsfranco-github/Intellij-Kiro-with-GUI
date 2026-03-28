@@ -1,5 +1,27 @@
+# Build & IDE
 .idea/
 build/
 .gradle/
 *.iml
 out/
+
+# IntelliJ Platform
+.intellijPlatform/
+
+# Kotlin
+.kotlin/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# JCEF logs
+jcef_*.log
+
+# Kiro workspace config
+.kiro/
+
+# Session/planning notes (dev-only)
+SESSION_STATE.md
+TODO.md
+PLAN.md
