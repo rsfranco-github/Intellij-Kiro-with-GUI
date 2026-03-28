@@ -1,7 +1,7 @@
 <idea-plugin>
-    <id>com.kiro.intellij</id>
+    <id>com.kiro.gui</id>
     <name>Kiro with GUI</name>
-    <vendor email="elsboo.dev@gmail.com" url="https://github.com/elsboo">elsboo</vendor>
+    <vendor email="catsarah3333@gmail.com" url="https://github.com/AwesomeHye/Intellij-Kiro-with-GUI.git">elsboo</vendor>
     <description><![CDATA[
         <p>A rich GUI plugin that integrates <a href="https://kiro.dev">Kiro CLI</a> into JetBrains IDEs.</p>
         <p>Chat with Kiro directly inside your IDE through a JCEF-based chat interface with Markdown rendering, code highlighting, and multi-session tabs.</p>

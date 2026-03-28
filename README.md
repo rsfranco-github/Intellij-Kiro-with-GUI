@@ -1,142 +1,144 @@
 # Kiro with GUI — IntelliJ Plugin
 
-[Kiro CLI](https://kiro.dev)를 JetBrains IDE에 통합하는 GUI 플러그인입니다.
-IDE의 Tool Window 안에서 kiro-cli와 대화하고, diff viewer, 에디터 컨텍스트, MCP 서버 등 IDE 기능과 연동할 수 있습니다.
+[한국어](README_KO.md) | English
 
-## 요구 사항
+A GUI plugin that integrates [Kiro CLI](https://kiro.dev) into JetBrains IDEs.
+Chat with kiro-cli directly inside your IDE, with diff viewer, editor context, and MCP server integration.
 
-| 항목 | 버전 |
-|------|------|
-| JetBrains IDE | 2025.1+ (IntelliJ IDEA, PyCharm, WebStorm 등) |
-| kiro-cli | 설치 필요 ([설치 가이드](https://kiro.dev/docs/cli/)) |
+## Requirements
 
-## 설치
+| Item | Version |
+|------|---------|
+| JetBrains IDE | 2025.1+ (IntelliJ IDEA, PyCharm, WebStorm, etc.) |
+| kiro-cli | Required ([Install Guide](https://kiro.dev/docs/cli/)) |
 
-### Marketplace에서 설치
+## Installation
 
-1. IDE에서 **Settings → Plugins → Marketplace**
-2. "Kiro with GUI" 검색
-3. Install → IDE 재시작
+### From Marketplace
 
-### 로컬 빌드 설치
+1. **Settings → Plugins → Marketplace**
+2. Search "Kiro with GUI"
+3. Install → Restart IDE
+
+### From Local Build
 
 ```bash
 git clone https://github.com/AwesomeHye/Intellij-Kiro-with-GUI.git
 cd intellij-kiro-plugin
 ./gradlew buildPlugin
-# 빌드 결과: build/distributions/kiro-with-gui-0.1.0.zip
+# Output: build/distributions/kiro-with-gui-0.1.0.zip
 ```
 
-1. IDE에서 **Settings → Plugins → ⚙️ → Install Plugin from Disk...**
-2. 빌드된 zip 파일 선택
-3. IDE 재시작
+1. **Settings → Plugins → ⚙️ → Install Plugin from Disk...**
+2. Select the built zip file
+3. Restart IDE
 
-## 사용법
+## Usage
 
-### 채팅
+### Chat
 
-1. IDE 우측의 **Kiro** Tool Window 클릭 (또는 `Cmd+Esc`)
-2. Chat 탭에서 메시지 입력
-3. 모델 선택: 입력창 하단의 모델 버튼 클릭
+1. Click the **Kiro** Tool Window on the right side (or `Cmd+Esc`)
+2. Type a message in the Chat tab
+3. Select a model using the button below the input field
 
-### 단축키
+### Keyboard Shortcuts
 
-| 단축키 (Mac) | 동작 |
-|-------------|------|
-| `Cmd+Esc` | Kiro Tool Window 열기/포커스 |
-| `Cmd+Shift+K` | 선택 텍스트를 Kiro에 전송 |
-| `Cmd+Option+K` | 현재 파일 참조 삽입 |
+| Shortcut (Mac) | Action |
+|----------------|--------|
+| `Cmd+Esc` | Open/focus Kiro Tool Window |
+| `Cmd+Shift+K` | Send selected text to Kiro |
+| `Cmd+Option+K` | Insert current file reference |
 
-### 슬래시 커맨드
+### Slash Commands
 
-| 커맨드 | 설명 |
-|--------|------|
-| `/model [이름]` | 현재 모델 확인/변경 |
-| `/clear` | 대화 기록 초기화 |
-| `/status` | CLI 상태 확인 (경로, 버전, 인증) |
-| `/help` | 도움말 |
-| `/context` | 컨텍스트 파일 관리 (CLI 전달) |
-| `/tools` | 도구 및 권한 보기 (CLI 전달) |
-| `/mcp` | MCP 서버 목록 (CLI 전달) |
-| `/compact` | 대화 요약 (CLI 전달) |
+| Command | Description |
+|---------|-------------|
+| `/model [name]` | Check or change current model |
+| `/clear` | Reset conversation history |
+| `/status` | Check CLI status (path, version, auth) |
+| `/help` | Help |
+| `/context` | Manage context files (passed to CLI) |
+| `/tools` | View tools and permissions (passed to CLI) |
+| `/mcp` | MCP server list (passed to CLI) |
+| `/compact` | Summarize conversation (passed to CLI) |
 
-### 관리 탭
+### Manage Tab
 
-Tool Window의 **Manage** 탭에서:
+In the **Manage** tab of the Tool Window:
 
-- **인증** — 로그인/로그아웃 상태 관리
-- **설정** — kiro-cli 경로, 기본 모델, 언어, Kiro 설정 디렉토리
-- **MCP** — MCP 서버 목록, 추가/제거/편집
-- **Skills** — 사용 가능한 도구 목록 및 검색
-- **Agent** — 에이전트 목록, 전환, 생성/편집
+- **Auth** — Login/logout management
+- **Settings** — kiro-cli path, default model, language, config directory
+- **MCP** — MCP server list, add/remove/edit
+- **Skills** — Available tools list and search
+- **Agent** — Agent list, switch, create/edit
 
-## 설정
+## Settings
 
-### 앱 레벨 (전체 IDE)
+### Application Level (All IDEs)
 
-**Settings → Tools → Kiro** 또는 Manage 탭 → 설정
+**Settings → Tools → Kiro** or Manage tab → Settings
 
-| 설정 | 기본값 | 설명 |
-|------|--------|------|
-| Kiro command | `kiro-cli` | kiro-cli 실행 경로 |
-| Default model | `Auto` | 기본 모델 |
-| Auto-start | `true` | IDE 시작 시 자동 실행 |
-| Language | `ko` | UI 언어 (ko/en) |
-| Kiro config dir | (비어있음) | 커스텀 설정 디렉토리 |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Kiro command | `kiro-cli` | kiro-cli executable path |
+| Default model | `Auto` | Default model |
+| Auto-start | `true` | Auto-start on IDE launch |
+| Language | `ko` | UI language (ko/en) |
+| Kiro config dir | (empty) | Custom config directory |
 
-### 프로젝트 레벨 (프로젝트별 독립)
+### Project Level (Per-project)
 
-프로젝트별로 모델, MCP 설정 경로, 자동 시작 여부를 오버라이드할 수 있습니다.
+Override model, MCP config path, and auto-start per project.
 
-## 주요 기능
+## Features
 
-- **채팅 UI** — JCEF 기반 채팅 인터페이스, 멀티 세션 탭, Markdown/코드 하이라이팅
-- **IDE 컨텍스트 연동** — 에디터 선택 텍스트 전송, `@파일#라인` 참조 삽입
-- **Diff Viewer** — kiro-cli가 제안한 파일 수정을 IDE diff viewer로 표시
-- **MCP 서버 관리** — mcp.json 기반 서버 목록 확인, 추가/제거, 활성화/비활성화
-- **Skills & Agent 관리** — 도구 목록, 에이전트 전환/생성
-- **다국어 지원** — 한국어/영어
-- **다중 프로젝트** — 프로젝트별 독립 세션과 설정
+- **Chat UI** — JCEF-based chat interface, multi-session tabs, Markdown/code highlighting
+- **IDE Context** — Send editor selections, insert `@File#Line` references
+- **Diff Viewer** — Review file changes proposed by Kiro using IDE's built-in diff viewer
+- **MCP Server Management** — View, add, remove, toggle MCP servers from mcp.json
+- **Skills & Agent Management** — Browse tools, switch or create agents
+- **Multi-language** — Korean and English
+- **Multi-project** — Independent sessions and settings per project
 
-## 개발
+## Development
 
-빌드에는 JDK 21+가 필요합니다.
+JDK 21+ is required for building.
 
-### 빌드
+### Build
 
 ```bash
-./gradlew build        # 전체 빌드
-./gradlew test         # 테스트 실행
-./gradlew runIde       # Sandbox IDE 실행
+./gradlew build        # Full build
+./gradlew test         # Run tests
+./gradlew runIde       # Run sandbox IDE
 ```
 
-### 디버깅
+### Debugging
 
 ```bash
 ./gradlew runIde --debug-jvm
-# IDE에서 Remote JVM Debug (localhost:5005) 연결
+# Connect Remote JVM Debug (localhost:5005) from IDE
 ```
 
-### 다른 IDE에서 테스트
+### Test with Other IDEs
 
 ```bash
 ./gradlew runIde -PalternativeIdePath=/Applications/PyCharm.app/Contents
 ```
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 src/main/kotlin/com/kiro/intellij/
-├── actions/           # IDE 액션 (Open, SendSelection, InsertFileRef)
-├── chat/              # 채팅 코어 (ChatPanel, ChatSession, KiroCliProcess)
-├── diff/              # Diff viewer 연동
-├── mcp/               # MCP 서버 (TCP + stdio bridge)
-├── settings/          # 앱/프로젝트 레벨 설정
-├── toolwindow/        # Tool Window UI (Manage, MCP, Skills, Agent 패널)
-└── util/              # 유틸리티 (Debouncer, ExpiringCache)
+├── actions/           # IDE actions (Open, SendSelection, InsertFileRef)
+├── chat/              # Chat core (ChatPanel, ChatSession, KiroCliProcess)
+├── diff/              # Diff viewer integration
+├── mcp/               # MCP server (TCP + stdio bridge)
+├── settings/          # App/project level settings
+├── toolwindow/        # Tool Window UI (Manage, MCP, Skills, Agent panels)
+└── util/              # Utilities (Debouncer, ExpiringCache)
 ```
 
-## 아키텍처
+## Architecture
 
 ```
 ┌──────────────────────────────────────────┐
@@ -154,16 +156,16 @@ src/main/kotlin/com/kiro/intellij/
 │                                          │
 │  ┌─────────────────────────────────────┐ │
 │  │  MCP Server (TCP + Node bridge)     │ │
-│  │  → kiro-cli에 IDE 도구 노출         │ │
+│  │  → Exposes IDE tools to kiro-cli    │ │
 │  └─────────────────────────────────────┘ │
 │                                          │
 │  ┌─────────────────────────────────────┐ │
-│  │  kiro-cli (매 메시지마다 실행)       │ │
+│  │  kiro-cli (invoked per message)     │ │
 │  │  → --no-interactive --resume        │ │
 │  └─────────────────────────────────────┘ │
 └──────────────────────────────────────────┘
 ```
 
-## 라이선스
+## License
 
 MIT License
