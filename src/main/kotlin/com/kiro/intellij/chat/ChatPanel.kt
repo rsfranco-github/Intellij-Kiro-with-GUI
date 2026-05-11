@@ -91,7 +91,11 @@ class ChatPanel(
         backendServer.removeSessionHtml(sessionId)
     }
 
-    internal fun buildHtml(port: Int, sessionId: String, initialBodyClass: String = "theme-dark"): String = """
+    internal fun buildHtml(port: Int, sessionId: String, initialBodyClass: String = "theme-dark"): String =
+        buildChatHtml(port, sessionId, initialBodyClass)
+}
+
+internal fun buildChatHtml(port: Int, sessionId: String, initialBodyClass: String = "theme-dark"): String = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -122,6 +126,7 @@ body.theme-dark {
     --assistant-fg: #d4d4d4;
     --accent: #007acc;
     --accent-hover: #005a9e;
+    --accent-shadow: rgba(0,122,204,0.3);
     --copy-btn-bg: rgba(255,255,255,0.08);
     --copy-btn-fg: #888;
     --copy-btn-hover-bg: rgba(255,255,255,0.15);
@@ -168,6 +173,7 @@ body.theme-light {
     --assistant-fg: #1f1f1f;
     --accent: #0969da;
     --accent-hover: #0860c9;
+    --accent-shadow: rgba(9,105,218,0.3);
     --copy-btn-bg: rgba(0,0,0,0.06);
     --copy-btn-fg: #57606a;
     --copy-btn-hover-bg: rgba(0,0,0,0.12);
@@ -283,7 +289,7 @@ body {
 }
 #input-wrapper:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 1px rgba(0,122,204,0.3);
+    box-shadow: 0 0 0 1px var(--accent-shadow);
 }
 /* input field - contenteditable */
 #input {
@@ -1302,4 +1308,3 @@ connectSSE(); input.focus();
 </body>
 </html>
     """.trimIndent()
-}
