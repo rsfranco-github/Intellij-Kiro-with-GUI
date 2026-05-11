@@ -14,7 +14,7 @@ class SendSelectionAction : AnAction() {
         val selectedText = editor.selectionModel.selectedText
         val text = if (!selectedText.isNullOrBlank()) {
             val fileName = file?.name ?: "unknown"
-            "다음 코드를 봐줘 ($fileName):\n```\n$selectedText\n```"
+            "Review this code ($fileName):\n```\n$selectedText\n```"
         } else {
             val filePath = file?.path ?: return
             "@$filePath"

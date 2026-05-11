@@ -38,11 +38,11 @@ class SettingsPanel(private val project: Project) {
         "deepseek-3.2", "minimax-m2.1", "minimax-m2.5", "qwen3-coder-next"
     ))
     private val languageComboBox = JComboBox(arrayOf(
-        "한국어" to "ko",
+        "Korean" to "ko",
         "English" to "en"
     ).map { it.first }.toTypedArray())
-    private val languageMap = mapOf("한국어" to "ko", "English" to "en")
-    private val reverseLanguageMap = mapOf("ko" to "한국어", "en" to "English")
+    private val languageMap = mapOf("Korean" to "ko", "English" to "en")
+    private val reverseLanguageMap = mapOf("ko" to "Korean", "en" to "English")
     
     private lateinit var configDirActivePathLabel: JBLabel
 
