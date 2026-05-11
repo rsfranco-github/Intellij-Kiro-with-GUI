@@ -4,6 +4,7 @@ build/
 .gradle/
 *.iml
 out/
+bin/
 
 # IntelliJ Platform
 .intellijPlatform/
@@ -25,3 +26,4 @@ jcef_*.log
 SESSION_STATE.md
 TODO.md
 PLAN.md
+docs/
