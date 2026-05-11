@@ -191,7 +191,7 @@ class SettingsPanel(private val project: Project) {
 
         // 테마 설정 카드
         val themeCard = KiroUI.createCard().apply {
-            add(KiroUI.createCardHeader("Theme:"), BorderLayout.NORTH)
+            add(KiroUI.createCardHeader(KiroMessages["settings.theme"]), BorderLayout.NORTH)
 
             val contentPanel = JPanel(BorderLayout()).apply {
                 isOpaque = false
@@ -200,7 +200,7 @@ class SettingsPanel(private val project: Project) {
 
             themeComboBox.maximumSize = KiroUI.scaledDimension(200, 30)
             contentPanel.add(themeComboBox, BorderLayout.NORTH)
-            contentPanel.add(JBLabel("Chat panel color theme (Auto follows IDE theme)").apply {
+            contentPanel.add(JBLabel(KiroMessages["settings.themeDesc"]).apply {
                 foreground = JBColor.gray
                 border = JBUI.Borders.emptyTop(KiroUI.Spacing.medium)
             }, BorderLayout.CENTER)
