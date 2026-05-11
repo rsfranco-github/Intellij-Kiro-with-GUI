@@ -1,8 +1,11 @@
 package com.kiro.intellij.chat
 
+import com.intellij.ide.ui.LafManager
+import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
 import com.kiro.intellij.settings.KiroSettings
 import java.awt.BorderLayout
@@ -31,13 +34,46 @@ class ChatPanel(
         initBrowser()
     }
 
+    private fun resolveInitialBodyClass(): String {
+        val theme = KiroSettings.getInstance().state.theme
+        return when (theme) {
+            "light" -> "theme-light"
+            "dark" -> "theme-dark"
+            else -> if (!JBColor.isBright()) "theme-dark" else "theme-light"
+        }
+    }
+
     private fun initBrowser() {
+        val initialBodyClass = resolveInitialBodyClass()
         browser = JBCefBrowser().also { b ->
             Disposer.register(this, b)
-            val html = buildHtml(backendServer.port, sessionId)
+            val html = buildHtml(backendServer.port, sessionId, initialBodyClass)
             backendServer.setSessionHtml(sessionId, html)
             b.loadURL("http://127.0.0.1:${backendServer.port}/ui?session=$sessionId")
             mainPanel.add(b.component, BorderLayout.CENTER)
+        }
+
+        // IDE 테마 변경 감지 (Auto 모드일 때만 반영)
+        val lafListener = LafManagerListener {
+            if (KiroSettings.getInstance().state.theme == "auto") {
+                val newClass = if (!JBColor.isBright()) "dark" else "light"
+                browser?.cefBrowser?.executeJavaScript("setTheme('$newClass')", "", 0)
+            }
+        }
+        LafManager.getInstance().addLafManagerListener(lafListener)
+        Disposer.register(this) {
+            LafManager.getInstance().removeLafManagerListener(lafListener)
+        }
+
+        // Settings에서 테마 변경 시 즉시 반영
+        val themeChangeCallback: () -> Unit = {
+            val newBodyClass = resolveInitialBodyClass()
+            val newThemeName = if (newBodyClass == "theme-dark") "dark" else "light"
+            browser?.cefBrowser?.executeJavaScript("setTheme('$newThemeName')", "", 0)
+        }
+        KiroSettings.onThemeChange(themeChangeCallback)
+        Disposer.register(this) {
+            KiroSettings.removeThemeListener(themeChangeCallback)
         }
     }
 
@@ -55,7 +91,7 @@ class ChatPanel(
         backendServer.removeSessionHtml(sessionId)
     }
 
-    private fun buildHtml(port: Int, sessionId: String): String = """
+    internal fun buildHtml(port: Int, sessionId: String, initialBodyClass: String = "theme-dark"): String = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -64,9 +100,102 @@ class ChatPanel(
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Dark theme variables */
+body.theme-dark {
+    --bg: #1e1e1e;
+    --fg: #d4d4d4;
+    --fg-muted: #666;
+    --fg-faint: #777;
+    --pre-bg: #0d1117;
+    --pre-border: #30363d;
+    --code-copy-bg: rgba(255,255,255,0.1);
+    --code-copy-fg: #888;
+    --code-inline-bg: #343942;
+    --blockquote-border: #555;
+    --blockquote-fg: #999;
+    --table-border: #444;
+    --table-bg: #333;
+    --user-bg: #264f78;
+    --user-fg: #e8e8e8;
+    --assistant-bg: #2d2d2d;
+    --assistant-fg: #d4d4d4;
+    --accent: #007acc;
+    --accent-hover: #005a9e;
+    --copy-btn-bg: rgba(255,255,255,0.08);
+    --copy-btn-fg: #888;
+    --copy-btn-hover-bg: rgba(255,255,255,0.15);
+    --preview-bg: #252526;
+    --preview-border: #444;
+    --danger: #c00;
+    --danger-fg: #f44;
+    --stop-bg: #6e6e6e;
+    --input-bg: #2d2d2d;
+    --border: #3c3c3c;
+    --placeholder-fg: #6e6e6e;
+    --menu-bg: #2d2d2d;
+    --menu-hover-bg: #094771;
+    --menu-border: #555;
+    --icon-btn-fg: #888;
+    --icon-btn-hover-fg: #d4d4d4;
+    --icon-btn-hover-bg: rgba(255,255,255,0.08);
+    --badge-file-bg: rgba(38,79,120,0.4);
+    --badge-file-fg: #7cb7e8;
+    --badge-file-border: rgba(58,110,165,0.5);
+    --badge-agent-bg: rgba(220,220,170,0.2);
+    --badge-agent-fg: #dcdcaa;
+    --badge-agent-border: rgba(220,220,170,0.4);
+}
+
+/* Light theme variables */
+body.theme-light {
+    --bg: #ffffff;
+    --fg: #1f1f1f;
+    --fg-muted: #666;
+    --fg-faint: #888;
+    --pre-bg: #f6f8fa;
+    --pre-border: #d0d7de;
+    --code-copy-bg: rgba(0,0,0,0.06);
+    --code-copy-fg: #57606a;
+    --code-inline-bg: #f0f2f4;
+    --blockquote-border: #d0d7de;
+    --blockquote-fg: #57606a;
+    --table-border: #d0d7de;
+    --table-bg: #f6f8fa;
+    --user-bg: #dbeafe;
+    --user-fg: #1e3a8a;
+    --assistant-bg: #f6f8fa;
+    --assistant-fg: #1f1f1f;
+    --accent: #0969da;
+    --accent-hover: #0860c9;
+    --copy-btn-bg: rgba(0,0,0,0.06);
+    --copy-btn-fg: #57606a;
+    --copy-btn-hover-bg: rgba(0,0,0,0.12);
+    --preview-bg: #f0f2f4;
+    --preview-border: #d0d7de;
+    --danger: #cf222e;
+    --danger-fg: #cf222e;
+    --stop-bg: #8c959f;
+    --input-bg: #f6f8fa;
+    --border: #d0d7de;
+    --placeholder-fg: #8c959f;
+    --menu-bg: #ffffff;
+    --menu-hover-bg: #ddf4ff;
+    --menu-border: #d0d7de;
+    --icon-btn-fg: #57606a;
+    --icon-btn-hover-fg: #1f1f1f;
+    --icon-btn-hover-bg: rgba(0,0,0,0.06);
+    --badge-file-bg: rgba(219,234,254,0.8);
+    --badge-file-fg: #1e40af;
+    --badge-file-border: rgba(147,197,253,0.6);
+    --badge-agent-bg: rgba(253,246,230,0.8);
+    --badge-agent-fg: #92400e;
+    --badge-agent-border: rgba(253,211,77,0.5);
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #1e1e1e; color: #d4d4d4;
+    background: var(--bg); color: var(--fg);
     display: flex; flex-direction: column; height: 100vh;
 }
 #messages {
@@ -78,87 +207,87 @@ body {
     font-size: 13px; line-height: 1.6; word-wrap: break-word;
 }
 .msg pre {
-    background: #0d1117; padding: 10px; border-radius: 6px;
-    overflow-x: auto; margin: 6px 0; border: 1px solid #30363d;
+    background: var(--pre-bg); padding: 10px; border-radius: 6px;
+    overflow-x: auto; margin: 6px 0; border: 1px solid var(--pre-border);
     white-space: pre; position: relative;
 }
 .msg pre .code-copy {
     position: absolute; top: 4px; right: 4px;
-    background: rgba(255,255,255,0.1); border: none; color: #888;
+    background: var(--code-copy-bg); border: none; color: var(--code-copy-fg);
     cursor: pointer; font-size: 11px; padding: 2px 6px;
     border-radius: 4px; opacity: 0; transition: opacity 0.15s;
 }
 .msg pre:hover .code-copy { opacity: 1; }
-.msg pre .code-copy:hover { color: #fff; background: rgba(255,255,255,0.2); }
+.msg pre .code-copy:hover { color: var(--fg); background: var(--copy-btn-hover-bg); }
 .msg code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
-.msg :not(pre) > code { background: #343942; padding: 2px 5px; border-radius: 3px; }
+.msg :not(pre) > code { background: var(--code-inline-bg); padding: 2px 5px; border-radius: 3px; }
 .msg p { margin: 4px 0; }
 .msg ul, .msg ol { padding-left: 20px; margin: 4px 0; }
 .msg h1,.msg h2,.msg h3,.msg h4 { font-size: 13px; font-weight: bold; margin: 8px 0 4px; }
 .msg strong { font-weight: normal; }
-.msg blockquote { border-left: 3px solid #555; padding-left: 10px; color: #999; margin: 4px 0; }
+.msg blockquote { border-left: 3px solid var(--blockquote-border); padding-left: 10px; color: var(--blockquote-fg); margin: 4px 0; }
 .msg hr { display: none; }
 .msg table { border-collapse: collapse; margin: 6px 0; width: 100%; display: table; }
-.msg th,.msg td { border: 1px solid #444; padding: 6px 10px; font-size: 12px; text-align: left; }
-.msg th { background: #333; font-weight: 600; }
-.msg tr:nth-child(even) { background: rgba(255,255,255,0.03); }
-.user { align-self: flex-end; background: #264f78; color: #e8e8e8; border-bottom-right-radius: 4px; }
-.assistant { align-self: flex-start; background: #2d2d2d; color: #d4d4d4; border-bottom-left-radius: 4px; }
-.assistant.streaming { border-left: 2px solid #007acc; }
-.msg-meta { font-size: 11px; color: #666; padding: 2px 8px; align-self: flex-start; }
+.msg th,.msg td { border: 1px solid var(--table-border); padding: 6px 10px; font-size: 12px; text-align: left; }
+.msg th { background: var(--table-bg); font-weight: 600; }
+.msg tr:nth-child(even) { background: rgba(128,128,128,0.05); }
+.user { align-self: flex-end; background: var(--user-bg); color: var(--user-fg); border-bottom-right-radius: 4px; }
+.assistant { align-self: flex-start; background: var(--assistant-bg); color: var(--assistant-fg); border-bottom-left-radius: 4px; }
+.assistant.streaming { border-left: 2px solid var(--accent); }
+.msg-meta { font-size: 11px; color: var(--fg-muted); padding: 2px 8px; align-self: flex-start; }
 .msg-wrap { position: relative; max-width: 95%; align-self: flex-start; }
 .msg-wrap.user-wrap { align-self: flex-end; }
 .msg-wrap .copy-btn {
-    position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,0.08);
-    border: none; color: #888; cursor: pointer; font-size: 12px; padding: 2px 5px;
+    position: absolute; top: 4px; right: 4px; background: var(--copy-btn-bg);
+    border: none; color: var(--copy-btn-fg); cursor: pointer; font-size: 12px; padding: 2px 5px;
     border-radius: 4px; opacity: 0; transition: opacity 0.15s;
 }
 .msg-wrap:hover .copy-btn { opacity: 1; }
-.msg-wrap .copy-btn:hover { color: #fff; background: rgba(255,255,255,0.15); }
+.msg-wrap .copy-btn:hover { color: var(--fg); background: var(--copy-btn-hover-bg); }
 .sys-toggle { align-self: flex-start; max-width: 95%; margin: 2px 0; }
 .sys-toggle summary {
-    font-size: 11px; color: #666; cursor: pointer; padding: 2px 8px;
+    font-size: 11px; color: var(--fg-muted); cursor: pointer; padding: 2px 8px;
     list-style: none; user-select: none;
 }
 .sys-toggle summary::-webkit-details-marker { display: none; }
 .sys-toggle summary::before { content: '▶ '; font-size: 9px; }
 .sys-toggle[open] summary::before { content: '▼ '; font-size: 9px; }
 .sys-toggle .sys-log-content {
-    font-size: 11px; color: #777; padding: 2px 8px 4px 16px;
+    font-size: 11px; color: var(--fg-faint); padding: 2px 8px 4px 16px;
     font-family: 'JetBrains Mono', monospace; white-space: pre-wrap;
 }
-#image-preview { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 12px; background: #252526; }
+#image-preview { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 12px; background: var(--preview-bg); }
 #image-preview:empty { display: none; }
-#image-preview img { max-height: 60px; border-radius: 4px; border: 1px solid #444; }
+#image-preview img { max-height: 60px; border-radius: 4px; border: 1px solid var(--preview-border); }
 #image-preview .img-wrap { position: relative; display: inline-block; }
 #image-preview .img-remove {
-    position: absolute; top: -4px; right: -4px; background: #c00; color: #fff;
+    position: absolute; top: -4px; right: -4px; background: var(--danger); color: #fff;
     border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 10px;
     cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
-/* 입력 컨테이너 (하단 고정, 통합 디자인) */
+/* input container */
 #input-container {
-    background: #1e1e1e;
-    border-top: 1px solid #3c3c3c;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
     padding: 8px;
 }
 #input-wrapper {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: #2d2d2d;
-    border: 1px solid #3c3c3c;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 8px 10px;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
-#input-wrapper:focus-within { 
-    border-color: #007acc; 
+#input-wrapper:focus-within {
+    border-color: var(--accent);
     box-shadow: 0 0 0 1px rgba(0,122,204,0.3);
 }
-/* 입력창 - contenteditable div로 변경하여 인라인 배지 지원 */
+/* input field - contenteditable */
 #input {
-    width: 100%; background: transparent; color: #d4d4d4; border: none;
+    width: 100%; background: transparent; color: var(--fg); border: none;
     font-size: 13px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 60px; max-height: 120px; line-height: 1.6; padding: 0;
@@ -166,11 +295,11 @@ body {
 }
 #input:empty::before {
     content: attr(data-placeholder);
-    color: #6e6e6e;
+    color: var(--placeholder-fg);
     pointer-events: none;
 }
 #input.disabled { opacity: 0.4; pointer-events: none; }
-/* 인라인 배지 스타일 */
+/* inline badge styles */
 .inline-badge {
     display: inline-flex; align-items: center; gap: 2px;
     padding: 1px 6px; border-radius: 4px; font-size: 12px;
@@ -178,82 +307,78 @@ body {
     user-select: all; cursor: default;
 }
 .inline-badge.file {
-    background: rgba(38,79,120,0.4); color: #7cb7e8;
-    border: 1px solid rgba(58,110,165,0.5);
+    background: var(--badge-file-bg); color: var(--badge-file-fg);
+    border: 1px solid var(--badge-file-border);
 }
 .inline-badge.agent {
-    background: rgba(220,220,170,0.2); color: #dcdcaa;
-    border: 1px solid rgba(220,220,170,0.4);
+    background: var(--badge-agent-bg); color: var(--badge-agent-fg);
+    border: 1px solid var(--badge-agent-border);
 }
-/* 하단 툴바 */
+/* toolbar */
 #input-toolbar {
     display: flex; align-items: center; gap: 6px;
 }
-/* 첨부 버튼 */
+/* attach button */
 #attach-btn {
     width: 24px; height: 24px; min-width: 24px;
-    background: transparent; border: none; color: #888; cursor: pointer;
+    background: transparent; border: none; color: var(--icon-btn-fg); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     border-radius: 4px; transition: color 0.15s, background 0.15s;
     flex-shrink: 0;
 }
-#attach-btn:hover { color: #d4d4d4; background: rgba(255,255,255,0.08); }
+#attach-btn:hover { color: var(--icon-btn-hover-fg); background: var(--icon-btn-hover-bg); }
 #attach-btn svg { width: 14px; height: 14px; }
-/* 모델 선택 버튼 */
+/* model selector button */
 .model-wrap { position: relative; flex-shrink: 0; margin-left: auto; }
 #model-btn {
-    background: transparent; color: #888; border: none;
-    border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;
-    transition: color 0.15s, background 0.15s;
-}
-#model-btn:hover { color: #d4d4d4; background: rgba(255,255,255,0.08); }
-/* 전송 버튼 */
-#send-btn {
-    width: 24px; height: 24px; min-width: 24px;
-    background: #007acc; color: #fff; border: none; border-radius: 4px;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, opacity 0.15s; flex-shrink: 0;
-}
-#send-btn:hover { background: #005a9e; }
-#send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-#send-btn svg { width: 12px; height: 12px; }
-#model-btn {
-    background: transparent; color: #888; border: none;
+    background: transparent; color: var(--icon-btn-fg); border: none;
     border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;
     transition: color 0.15s, background 0.15s; white-space: nowrap;
 }
-#model-btn:hover { color: #d4d4d4; background: rgba(255,255,255,0.08); }
+#model-btn:hover { color: var(--icon-btn-hover-fg); background: var(--icon-btn-hover-bg); }
+/* send button */
+#send-btn {
+    width: 24px; height: 24px; min-width: 24px;
+    background: var(--accent); color: #fff; border: none; border-radius: 4px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, opacity 0.15s; flex-shrink: 0;
+}
+#send-btn.stop-btn { background: var(--stop-bg); }
+#send-btn:hover { background: var(--accent-hover); }
+#send-btn.stop-btn:hover { background: var(--fg-muted); }
+#send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+#send-btn svg { width: 12px; height: 12px; }
 #model-menu {
     display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 4px;
-    background: #2d2d2d; border: 1px solid #555; border-radius: 6px;
-    min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 999;
+    background: var(--menu-bg); border: 1px solid var(--menu-border); border-radius: 6px;
+    min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999;
 }
 #model-menu .m-item {
-    padding: 6px 12px; font-size: 12px; color: #ccc; cursor: pointer;
+    padding: 6px 12px; font-size: 12px; color: var(--fg); cursor: pointer;
 }
-#model-menu .m-item:hover { background: #094771; color: #fff; }
-#model-menu .m-item.active { color: #4fc1ff; }
+#model-menu .m-item:hover { background: var(--menu-hover-bg); }
+#model-menu .m-item.active { color: var(--accent); }
 #autocomplete {
-    display: none; position: fixed; background: #2d2d2d; border: 1px solid #555;
+    display: none; position: fixed; background: var(--menu-bg); border: 1px solid var(--menu-border);
     border-radius: 6px; max-height: 240px; overflow-y: auto; z-index: 999;
-    min-width: 280px; max-width: 400px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    min-width: 280px; max-width: 400px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 #autocomplete .ac-item {
     display: flex; align-items: flex-start; gap: 8px;
-    padding: 6px 10px; font-size: 12px; color: #ccc; cursor: pointer;
+    padding: 6px 10px; font-size: 12px; color: var(--fg); cursor: pointer;
 }
-#autocomplete .ac-item:hover, #autocomplete .ac-item.selected { background: #094771; color: #fff; }
+#autocomplete .ac-item:hover, #autocomplete .ac-item.selected { background: var(--menu-hover-bg); }
 #autocomplete .ac-icon { width: 16px; flex-shrink: 0; text-align: center; }
 #autocomplete .ac-content { flex: 1; min-width: 0; }
 #autocomplete .ac-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#autocomplete .ac-secondary { font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#autocomplete .ac-item.selected .ac-secondary { color: #aaa; }
+#autocomplete .ac-secondary { font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#autocomplete .ac-item.selected .ac-secondary { color: var(--fg-faint); }
 #autocomplete .ac-match { color: #e8a838; font-weight: 600; }
-/* 컨텍스트 태그 영역 - 사용 안함 */
+/* context tags area - unused */
 #context-tags { display: none; }
 .typing-indicator { display: inline-flex; gap: 4px; padding: 4px 0; }
 .typing-indicator span {
-    width: 6px; height: 6px; background: #888; border-radius: 50%;
+    width: 6px; height: 6px; background: var(--fg-muted); border-radius: 50%;
     animation: bounce 1.4s infinite ease-in-out;
 }
 .typing-indicator span:nth-child(1) { animation-delay: 0s; }
@@ -268,15 +393,16 @@ body {
     align-self: flex-start;
 }
 .typing-indicator-standalone span {
-    width: 6px; height: 6px; background: #888; border-radius: 50%;
+    width: 6px; height: 6px; background: var(--fg-muted); border-radius: 50%;
     animation: bounce 1.4s infinite ease-in-out;
 }
 .typing-indicator-standalone span:nth-child(1) { animation-delay: 0s; }
 .typing-indicator-standalone span:nth-child(2) { animation-delay: 0.2s; }
 .typing-indicator-standalone span:nth-child(3) { animation-delay: 0.4s; }
+.error-text { color: var(--danger-fg); }
 </style>
 </head>
-<body>
+<body class="$initialBodyClass">
 <div id="messages"></div>
 <div id="image-preview"></div>
 <div id="input-container">
@@ -323,11 +449,17 @@ let excludedPaths = new Set();
 let attachedImages = [];
 let acSelectedIndex = -1;
 let currentModel = 'Auto';
-let projectFiles = [];  // 프로젝트 파일 목록 (캐시)
-let agents = [];        // 에이전트 목록 (캐시)
-let i18n = { placeholder: '', openFile: '', systemLog: '' }; // 다국어 메시지
+let projectFiles = [];
+let agents = [];
+let i18n = { placeholder: '', openFile: '', systemLog: '' };
 
-// i18n 로드
+// Theme switching
+function setTheme(name) {
+    document.body.classList.remove('theme-dark', 'theme-light');
+    document.body.classList.add('theme-' + name);
+}
+
+// i18n load
 fetch(API + '/api/i18n').then(r => r.json()).then(data => {
     i18n = data;
     input.dataset.placeholder = i18n.placeholder || 'Enter message...';
@@ -335,10 +467,7 @@ fetch(API + '/api/i18n').then(r => r.json()).then(data => {
     input.dataset.placeholder = 'Enter message...';
 });
 
-// 시스템 로그 분류는 백엔드(KiroCliProcess)에서 [SYS] 접두사로 처리
-// 프론트엔드에서는 [SYS] 접두사만 확인
-
-// 완전히 제거할 패턴 (표시하지 않음)
+// Skip patterns (lines to not display)
 const SKIP_PATTERNS = [
     /^\s*$/
 ];
@@ -386,11 +515,11 @@ modelBtn.onclick = (e) => {
 };
 document.addEventListener('click', () => { modelMenu.style.display = 'none'; });
 
-// contenteditable input 이벤트
+// contenteditable input events
 let isComposing = false;
 input.addEventListener('compositionstart', () => { isComposing = true; });
 input.addEventListener('compositionend', () => { isComposing = false; handleAutocomplete(); });
-// 붙여넣기 시 순수 텍스트만 삽입 (HTML 말풍선 방지)
+// paste as plain text only
 input.addEventListener('paste', (e) => {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
@@ -426,7 +555,7 @@ function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
-// contenteditable에서 텍스트 추출 (배지는 #name, @name 형태로 변환)
+// extract text from contenteditable (badges as #name or @name)
 function getInputText() {
     let text = '';
     input.childNodes.forEach(node => {
@@ -445,11 +574,11 @@ function getInputText() {
     return text;
 }
 
-function setInput(text) { 
-    input.textContent = text; 
-    input.dispatchEvent(new Event('input')); 
-    input.focus(); 
-    // 커서를 끝으로 이동
+function setInput(text) {
+    input.textContent = text;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+    // move cursor to end
     const range = document.createRange();
     const sel = window.getSelection();
     range.selectNodeContents(input);
@@ -462,21 +591,20 @@ function sendMessage() {
     const text = getInputText().trim();
     if (!text || isStreaming) return;
     hideAutocomplete();
-    
-    // 메시지 내에 #file, @agent가 인라인으로 포함되어 있음
+
     let fullMessage = text;
-    
-    // 현재 활성화된 파일 항상 컨텍스트에 추가
+
+    // always include active file as context
     const activeFile = openFiles.find(f => f.active);
     if (activeFile) {
         fullMessage = '[Current file: ' + activeFile.relativePath + ']\n' + fullMessage;
     }
-    
+
     if (attachedImages.length > 0) {
         const paths = attachedImages.map(img => img.savedPath || img.name).join(', ');
         fullMessage = '[Attached images: ' + paths + ']\n' + fullMessage;
     }
-    
+
     addUserMessage(text);
     input.innerHTML = '';
     attachedImages = []; imagePreview.innerHTML = '';
@@ -503,7 +631,6 @@ function startAssistantMessage() {
     currentContent = ''; sysLogCount = 0; currentSysToggle = null;
     currentAssistantWrap = null;
     currentAssistantDiv = null;
-    // 독립 typing indicator 표시
     typingIndicator = document.createElement('div');
     typingIndicator.className = 'typing-indicator-standalone';
     typingIndicator.innerHTML = '<span></span><span></span><span></span>';
@@ -513,7 +640,6 @@ function startAssistantMessage() {
 
 function ensureAssistantBubble() {
     if (currentAssistantDiv) return;
-    // typing indicator 제거
     if (typingIndicator) { typingIndicator.remove(); typingIndicator = null; }
     currentAssistantWrap = document.createElement('div');
     currentAssistantWrap.className = 'msg-wrap';
@@ -528,7 +654,6 @@ function ensureAssistantBubble() {
 }
 
 function renderContent(raw) {
-    // 시스템 메시지 패턴 제거
     let display = raw
         .replace(/▸\s*Time:\s*[\d.]+s/g, '')
         .replace(/Completed in [\d.]+s\.?/gi, '')
@@ -539,51 +664,46 @@ function renderContent(raw) {
         .replace(/\[\d+m/g, '')
         .replace(/\*\*([^*]+)\*\*/g, '$1')
         .trim();
-    
+
     if (!display) return '';
-    
-    // kiro-cli --no-interactive는 ```를 출력하지 않음
-    // 언어 힌트(kotlin, java 등) + 코드 패턴을 감지하여 ```로 감싸기
+
     display = autoWrapCodeBlocks(display);
-    
-    try { 
+
+    try {
         if (typeof marked !== 'undefined' && marked.parse) {
             return marked.parse(display);
         }
         return simpleMarkdown(display);
     }
-    catch(e) { 
+    catch(e) {
         console.error('Markdown parse error:', e);
         return simpleMarkdown(display);
     }
 }
 
-// kiro-cli --no-interactive 출력 패턴:
-// 언어이름 (예: "kotlin") 한 줄 → 코드 → 빈 줄 2개로 종료
+// kiro-cli --no-interactive output: lang hint line -> code -> double blank
 const CODE_LANG_HINTS = /^(kotlin|java|python|javascript|typescript|bash|sh|shell|sql|xml|json|yaml|yml|html|css|swift|rust|go|c|cpp|ruby|php|scala|groovy|dart|text|plaintext|diff|makefile|dockerfile|toml|ini|properties|gradle)\s*$/i;
 
 function autoWrapCodeBlocks(text) {
     if (text.includes('```')) return text;
-    
+
     const lines = text.split('\n');
     const result = [];
     let i = 0;
-    
+
     while (i < lines.length) {
         const trimmed = lines[i].trim();
-        
-        // 언어 힌트 감지
+
         if (CODE_LANG_HINTS.test(trimmed)) {
             const lang = trimmed.toLowerCase();
             const codeLines = [];
             i++;
-            
-            // 코드 수집: 빈 줄 2개 연속 또는 자연어 문장이 나올 때까지
+
             let emptyCount = 0;
             while (i < lines.length) {
                 const line = lines[i];
                 const lt = line.trim();
-                
+
                 if (lt === '') {
                     emptyCount++;
                     if (emptyCount >= 2) { i++; break; }
@@ -591,23 +711,21 @@ function autoWrapCodeBlocks(text) {
                     i++;
                     continue;
                 }
-                
+
                 emptyCount = 0;
-                
-                // 자연어 문장이면 코드 블럭 종료
+
                 if (isNaturalLanguage(lt)) {
                     break;
                 }
-                
+
                 codeLines.push(line);
                 i++;
             }
-            
-            // 끝의 빈 줄 제거
+
             while (codeLines.length > 0 && codeLines[codeLines.length - 1].trim() === '') {
                 codeLines.pop();
             }
-            
+
             if (codeLines.length > 0) {
                 result.push('```' + lang);
                 result.push(...codeLines);
@@ -618,50 +736,40 @@ function autoWrapCodeBlocks(text) {
             i++;
         }
     }
-    
+
     return result.join('\n');
 }
 
 function isNaturalLanguage(line) {
     if (!line || line.length < 3) return false;
-    if (/[\uAC00-\uD7AF\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(line)) return true;
+    if (/[가-힯぀-ゟ゠-ヿ一-鿿]/.test(line)) return true;
     if (/^[A-Z][a-z]+\s+[a-z]+\s/.test(line)) return true;
     if (/^(The|This|It|Here|Note|See|For|If|When|After|Before|You|We|I)\s/i.test(line)) return true;
-    if (/^\d+\.\s+[A-Za-z\uAC00-\uD7AF]/.test(line)) return true;
-    if (/^[-*]\s+[A-Za-z\uAC00-\uD7AF]/.test(line)) return true;
+    if (/^\d+\.\s+[A-Za-z가-힯]/.test(line)) return true;
+    if (/^[-*]\s+[A-Za-z가-힯]/.test(line)) return true;
     if (/^>\s/.test(line)) return true;
     return false;
 }
 
-// 간단한 마크다운 파서 (fallback)
+// simple markdown fallback
 function simpleMarkdown(text) {
     let html = escapeHtml(text);
-    
-    // 코드 블록
+
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    
-    // 인라인 코드
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // 헤더
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    
-    // 굵게/기울임
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    
-    // 리스트
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
     html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
-    
-    // 테이블 (간단한 처리)
+
     const lines = html.split('\n');
     let inTable = false;
     let tableHtml = '';
     const result = [];
-    
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.includes('|') && line.trim().startsWith('|')) {
@@ -669,9 +777,8 @@ function simpleMarkdown(text) {
                 inTable = true;
                 tableHtml = '<table>';
             }
-            // 구분선 무시
             if (/^\|[\s\-:|]+\|$/.test(line.trim())) continue;
-            
+
             const cells = line.split('|').filter(c => c.trim());
             const isHeader = i === 0 || (i > 0 && /^\|[\s\-:|]+\|$/.test(lines[i-1]?.trim() || ''));
             const tag = isHeader ? 'th' : 'td';
@@ -690,28 +797,22 @@ function simpleMarkdown(text) {
         tableHtml += '</table>';
         result.push(tableHtml);
     }
-    
+
     html = result.join('\n');
-    
-    // 줄바꿈
     html = html.replace(/\n/g, '<br>');
-    
-    // 연속 br 정리
     html = html.replace(/(<br>){3,}/g, '<br><br>');
-    
+
     return html;
 }
 
 function appendChunk(chunk) {
     const lines = chunk.split('\n');
     for (const line of lines) {
-        // 완전히 제거할 라인
         if (shouldSkipLine(line)) continue;
-        
-        // 백엔드에서 [SYS] 접두사로 시스템 로그 표시
+
         const isSys = line.startsWith('[SYS]');
         const displayLine = isSys ? line.substring(5) : line;
-        
+
         if (isSys) {
             if (typingIndicator) { typingIndicator.remove(); typingIndicator = null; }
             flushContent();
@@ -749,7 +850,7 @@ function flushContent() {
 
 function addCodeCopyButtons(container) {
     container.querySelectorAll('pre').forEach(pre => {
-        if (pre.querySelector('.code-copy')) return; // 이미 있으면 스킵
+        if (pre.querySelector('.code-copy')) return;
         const btn = document.createElement('button');
         btn.className = 'code-copy';
         btn.textContent = '📋';
@@ -785,31 +886,31 @@ function addErrorMessage(text) {
     if (typingIndicator) { typingIndicator.remove(); typingIndicator = null; }
     ensureAssistantBubble();
     if (currentAssistantDiv) {
-        currentAssistantDiv.innerHTML = '<span style="color:#f44">⚠ ' + escapeHtml(text) + '</span>';
+        currentAssistantDiv.innerHTML = '<span class="error-text">⚠ ' + escapeHtml(text) + '</span>';
         currentAssistantDiv.classList.remove('streaming'); currentAssistantDiv = null;
     }
 }
 
-function setEnabled(en) { 
-    isStreaming = !en; 
-    if (!en) input.classList.add('disabled'); 
+function setEnabled(en) {
+    isStreaming = !en;
+    if (!en) input.classList.add('disabled');
     else input.classList.remove('disabled');
     input.contentEditable = en ? 'true' : 'false';
-    
-    // 전송/중단 버튼 전환
+
+    // toggle send/stop button
     if (en) {
         sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
-        sendBtn.style.background = '#007acc';
+        sendBtn.classList.remove('stop-btn');
         sendBtn.onclick = () => sendMessage();
         sendBtn.title = 'Send (Enter)';
     } else {
         sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
-        sendBtn.style.background = '#6e6e6e';
+        sendBtn.classList.add('stop-btn');
         sendBtn.onclick = () => stopGeneration();
         sendBtn.title = 'Stop';
     }
     sendBtn.disabled = false;
-    if (en) input.focus(); 
+    if (en) input.focus();
 }
 
 function stopGeneration() {
@@ -820,7 +921,7 @@ function stopGeneration() {
 function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
 function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// --- 슬래시 커맨드 목록 ---
+// --- slash commands ---
 const SLASH_COMMANDS = [
     { cmd: '/quit', desc: 'Quit the app' },
     { cmd: '/clear', desc: 'Clear conversation history' },
@@ -847,7 +948,7 @@ const SLASH_COMMANDS = [
     { cmd: '/help', desc: 'Show help' },
 ];
 
-// 파일 확장자별 아이콘
+// file extension icons
 const FILE_ICONS = {
     'kt': '📄', 'java': '☕', 'ts': '🔷', 'tsx': '🔷', 'js': '🟨', 'jsx': '🟨',
     'json': '📋', 'xml': '📰', 'md': '📝', 'yaml': '⚙️', 'yml': '⚙️',
@@ -860,21 +961,20 @@ function getFileIcon(filename) {
     return FILE_ICONS[ext] || FILE_ICONS['default'];
 }
 
-// --- 자동완성 타입 ---
+// --- autocomplete type ---
 let acType = ''; // 'command', 'file', 'agent'
 let acDebounceTimer = null;
 
-// contenteditable에서 커서 앞의 텍스트 가져오기
+// get text before cursor in contenteditable
 function getTextBeforeCursor() {
     const sel = window.getSelection();
     if (!sel.rangeCount) return '';
-    
+
     const range = sel.getRangeAt(0);
     const preRange = range.cloneRange();
     preRange.selectNodeContents(input);
     preRange.setEnd(range.startContainer, range.startOffset);
-    
-    // 텍스트만 추출 (배지는 무시)
+
     let text = '';
     const walker = document.createTreeWalker(input, NodeFilter.SHOW_TEXT, null, false);
     let node;
@@ -891,8 +991,8 @@ function getTextBeforeCursor() {
             }
         }
     }
-    
-    // 간단한 방식: 현재 텍스트 노드에서 커서 앞 텍스트
+
+    // simple fallback: text before cursor in current text node
     if (range.startContainer.nodeType === Node.TEXT_NODE) {
         return range.startContainer.textContent.substring(0, range.startOffset);
     }
@@ -901,16 +1001,16 @@ function getTextBeforeCursor() {
 
 function handleAutocomplete() {
     const before = getTextBeforeCursor();
-    
-    // 슬래시 커맨드 자동완성 (줄 시작에서만)
+
+    // slash command autocomplete (line start only)
     const slashMatch = before.match(/^\/([^\s]*)$/) || before.match(/\n\/([^\s]*)$/);
     if (slashMatch) {
         const q = slashMatch[1].toLowerCase();
         const matches = SLASH_COMMANDS.filter(c => c.cmd.toLowerCase().includes('/' + q)).slice(0, 15);
         if (matches.length > 0) { showCommandAutocomplete(matches); return; }
     }
-    
-    // # 파일 검색 자동완성
+
+    // # file search autocomplete
     const hashMatch = before.match(/#([^\s]*)$/);
     if (hashMatch) {
         const q = hashMatch[1];
@@ -918,13 +1018,12 @@ function handleAutocomplete() {
         acDebounceTimer = setTimeout(() => searchProjectFiles(q), 150);
         return;
     }
-    
-    // @ 에이전트 자동완성
+
+    // @ agent autocomplete
     const atMatch = before.match(/@([^\s]*)$/);
     if (atMatch) {
         const q = atMatch[1].toLowerCase();
         if (agents.length === 0) {
-            // 에이전트 목록 로드
             fetch(API + '/api/agents').then(r => r.json()).then(data => {
                 agents = data;
                 showAgentAutocomplete(q);
@@ -934,11 +1033,11 @@ function handleAutocomplete() {
         }
         return;
     }
-    
+
     hideAutocomplete();
 }
 
-// 프로젝트 파일 검색
+// project file search
 function searchProjectFiles(query) {
     const url = query ? API + '/api/project-files?q=' + encodeURIComponent(query) : API + '/api/project-files';
     fetch(url).then(r => r.json()).then(files => {
@@ -950,7 +1049,7 @@ function searchProjectFiles(query) {
     }).catch(() => hideAutocomplete());
 }
 
-// 파일 검색 자동완성 표시
+// show file search autocomplete
 function showFileSearchAutocomplete(files, query) {
     acType = 'file';
     autocompleteDiv.innerHTML = ''; acSelectedIndex = 0;
@@ -970,12 +1069,12 @@ function showFileSearchAutocomplete(files, query) {
     positionAutocomplete();
 }
 
-// 에이전트 자동완성 표시
+// show agent autocomplete
 function showAgentAutocomplete(query) {
     acType = 'agent';
     const matches = agents.filter(a => a.name.toLowerCase().includes(query)).slice(0, 10);
     if (matches.length === 0) { hideAutocomplete(); return; }
-    
+
     autocompleteDiv.innerHTML = ''; acSelectedIndex = 0;
     matches.forEach((a, i) => {
         const item = document.createElement('div');
@@ -993,7 +1092,7 @@ function showAgentAutocomplete(query) {
     positionAutocomplete();
 }
 
-// 매칭 텍스트 하이라이트
+// highlight matching text
 function highlightMatch(text, query) {
     if (!query) return escapeHtml(text);
     const idx = text.toLowerCase().indexOf(query.toLowerCase());
@@ -1029,25 +1128,25 @@ function positionAutocomplete() {
 }
 
 function insertCommandAutocomplete(cmd) {
-    // 커서 위치에서 /query를 cmd로 교체
+    // replace /query with cmd at cursor
     deleteTextBeforeCursor(/\/[^\s]*$/);
     insertTextAtCursor(cmd + ' ');
     hideAutocomplete(); input.focus();
 }
 
-// 커서 앞의 패턴 삭제
+// delete text before cursor matching pattern
 function deleteTextBeforeCursor(pattern) {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
-    
+
     const range = sel.getRangeAt(0);
     if (range.startContainer.nodeType !== Node.TEXT_NODE) return;
-    
+
     const textNode = range.startContainer;
     const offset = range.startOffset;
     const text = textNode.textContent.substring(0, offset);
     const match = text.match(pattern);
-    
+
     if (match) {
         const start = text.lastIndexOf(match[0]);
         textNode.textContent = textNode.textContent.substring(0, start) + textNode.textContent.substring(offset);
@@ -1058,11 +1157,11 @@ function deleteTextBeforeCursor(pattern) {
     }
 }
 
-// 커서 위치에 텍스트 삽입
+// insert text at cursor
 function insertTextAtCursor(text) {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
-    
+
     const range = sel.getRangeAt(0);
     range.deleteContents();
     const textNode = document.createTextNode(text);
@@ -1073,43 +1172,42 @@ function insertTextAtCursor(text) {
     sel.addRange(range);
 }
 
-// 커서 위치에 배지 삽입
+// insert badge at cursor
 function insertBadgeAtCursor(type, name, displayName) {
     const sel = window.getSelection();
     if (!sel.rangeCount) return;
-    
+
     const range = sel.getRangeAt(0);
     range.deleteContents();
-    
-    // 배지 요소 생성
+
     const badge = document.createElement('span');
     badge.className = 'inline-badge ' + type;
     badge.contentEditable = 'false';
     badge.dataset.type = type;
     badge.dataset.name = name;
     badge.innerHTML = '<span style="opacity:0.7">' + (type === 'file' ? '#' : '@') + '</span>' + escapeHtml(displayName);
-    
+
     range.insertNode(badge);
-    
-    // 배지 뒤에 공백 추가
+
+    // add space after badge
     const space = document.createTextNode(' ');
     badge.parentNode.insertBefore(space, badge.nextSibling);
-    
-    // 커서를 공백 뒤로 이동
+
+    // move cursor after space
     range.setStartAfter(space);
     range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);
 }
 
-// 파일 컨텍스트 삽입 (커서 위치에 배지로 삽입)
+// insert file context badge
 function insertFileContext(path, name) {
     deleteTextBeforeCursor(/#[^\s]*$/);
     insertBadgeAtCursor('file', path, name);
     hideAutocomplete(); input.focus();
 }
 
-// 에이전트 컨텍스트 삽입 (커서 위치에 배지로 삽입)
+// insert agent context badge
 function insertAgentContext(name) {
     deleteTextBeforeCursor(/@[^\s]*$/);
     insertBadgeAtCursor('agent', name, name);
@@ -1135,7 +1233,6 @@ function addImage(file) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const dataUrl = ev.target.result;
-        // 서버에 저장 요청
         fetch(API + '/api/save-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1171,21 +1268,21 @@ function connectSSE() {
     es.onerror = () => setTimeout(connectSSE, 2000);
 }
 
-// marked.js 설정 (GFM 테이블, 줄바꿈 지원)
-if (typeof marked !== 'undefined') { 
+// marked.js config (GFM table, line breaks)
+if (typeof marked !== 'undefined') {
     const renderer = new marked.Renderer();
-    // 볼드체 비활성화 - 일반 텍스트로 출력
+    // disable bold - output as plain text
     renderer.strong = (text) => text;
-    // hr 비활성화
+    // disable hr
     renderer.hr = () => '';
-    
-    marked.setOptions({ 
-        breaks: true, 
+
+    marked.setOptions({
+        breaks: true,
         gfm: true,
         headerIds: false,
         mangle: false,
         renderer: renderer
-    }); 
+    });
 } else {
     console.warn('marked.js not loaded, using fallback renderer');
 }
@@ -1194,7 +1291,6 @@ if (typeof marked !== 'undefined') {
 function refreshOpenFiles() {
     fetch(API + '/api/open-files').then(r => r.json()).then(files => {
         const currentPaths = new Set(files.map(f => f.path));
-        // 더 이상 열려있지 않은 파일은 excluded에서도 제거
         for (const p of excludedPaths) { if (!currentPaths.has(p)) excludedPaths.delete(p); }
         openFiles = files;
     }).catch(() => {});

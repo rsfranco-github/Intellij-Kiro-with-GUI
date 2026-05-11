@@ -13,7 +13,7 @@ import java.awt.*
 import javax.swing.*
 
 /**
- * 설정 패널 - kiro-cli 경로, 기본 모델, 언어, 자동 시작 등
+ * 설정 패널 - kiro-cli 경로, 기본 모델, 언어, 테마 등
  * JetBrains UI 가이드라인 준수
  */
 class SettingsPanel(private val project: Project) {
@@ -29,11 +29,11 @@ class SettingsPanel(private val project: Project) {
     }
 
     private val panel = JPanel(BorderLayout())
-    
+
     private val kiroPathField = TextFieldWithBrowseButton()
     private val kiroConfigDirField = TextFieldWithBrowseButton()
     private val modelComboBox = JComboBox(arrayOf(
-        "Auto", "claude-opus-4.6", "claude-sonnet-4.6", "claude-opus-4.5", 
+        "Auto", "claude-opus-4.6", "claude-sonnet-4.6", "claude-opus-4.5",
         "claude-sonnet-4.5", "claude-sonnet-4", "claude-haiku-4.5",
         "deepseek-3.2", "minimax-m2.1", "minimax-m2.5", "qwen3-coder-next"
     ))
@@ -43,7 +43,11 @@ class SettingsPanel(private val project: Project) {
     ).map { it.first }.toTypedArray())
     private val languageMap = mapOf("Korean" to "ko", "English" to "en")
     private val reverseLanguageMap = mapOf("ko" to "Korean", "en" to "English")
-    
+
+    private val themeComboBox = JComboBox(arrayOf("Auto", "Light", "Dark"))
+    private val themeMap = mapOf("Auto" to "auto", "Light" to "light", "Dark" to "dark")
+    private val reverseThemeMap = mapOf("auto" to "Auto", "light" to "Light", "dark" to "Dark")
+
     private lateinit var configDirActivePathLabel: JBLabel
 
     val component: JComponent get() = panel
@@ -66,21 +70,21 @@ class SettingsPanel(private val project: Project) {
         // kiro-cli 경로 카드
         val pathCard = KiroUI.createCard().apply {
             add(KiroUI.createCardHeader(KiroMessages["settings.cliPath"], KiroUI.Icons.settings), BorderLayout.NORTH)
-            
+
             val contentPanel = JPanel(BorderLayout()).apply {
                 isOpaque = false
                 border = JBUI.Borders.empty(KiroUI.Spacing.large)
             }
-            
+
             kiroPathField.addBrowseFolderListener(
                 "kiro-cli",
                 KiroMessages["settings.cliPathDesc"],
                 project,
                 FileChooserDescriptorFactory.createSingleFileDescriptor()
             )
-            
+
             contentPanel.add(kiroPathField, BorderLayout.CENTER)
-            
+
             // 실제 경로 표시
             val resolvedPath = resolveKiroCliPath(kiroPathField.text.ifBlank { "kiro-cli" })
             val pathInfoLabel = JBLabel(resolvedPath).apply {
@@ -89,7 +93,7 @@ class SettingsPanel(private val project: Project) {
                 border = JBUI.Borders.emptyTop(KiroUI.Spacing.medium)
             }
             contentPanel.add(pathInfoLabel, BorderLayout.SOUTH)
-            
+
             add(contentPanel, BorderLayout.CENTER)
         }
 
@@ -136,38 +140,57 @@ class SettingsPanel(private val project: Project) {
         // 기본 모델 카드
         val modelCard = KiroUI.createCard().apply {
             add(KiroUI.createCardHeader(KiroMessages["settings.defaultModel"]), BorderLayout.NORTH)
-            
+
             val contentPanel = JPanel(BorderLayout()).apply {
                 isOpaque = false
                 border = JBUI.Borders.empty(KiroUI.Spacing.large)
             }
-            
+
             modelComboBox.maximumSize = KiroUI.scaledDimension(300, 30)
             contentPanel.add(modelComboBox, BorderLayout.NORTH)
             contentPanel.add(JBLabel(KiroMessages["settings.defaultModelDesc"]).apply {
                 foreground = JBColor.gray
                 border = JBUI.Borders.emptyTop(KiroUI.Spacing.medium)
             }, BorderLayout.CENTER)
-            
+
             add(contentPanel, BorderLayout.CENTER)
         }
 
         // 언어 설정 카드
         val languageCard = KiroUI.createCard().apply {
             add(KiroUI.createCardHeader(KiroMessages["settings.language"]), BorderLayout.NORTH)
-            
+
             val contentPanel = JPanel(BorderLayout()).apply {
                 isOpaque = false
                 border = JBUI.Borders.empty(KiroUI.Spacing.large)
             }
-            
+
             languageComboBox.maximumSize = KiroUI.scaledDimension(200, 30)
             contentPanel.add(languageComboBox, BorderLayout.NORTH)
             contentPanel.add(JBLabel(KiroMessages["settings.languageDesc"]).apply {
                 foreground = JBColor.gray
                 border = JBUI.Borders.emptyTop(KiroUI.Spacing.medium)
             }, BorderLayout.CENTER)
-            
+
+            add(contentPanel, BorderLayout.CENTER)
+        }
+
+        // 테마 설정 카드
+        val themeCard = KiroUI.createCard().apply {
+            add(KiroUI.createCardHeader("Theme:"), BorderLayout.NORTH)
+
+            val contentPanel = JPanel(BorderLayout()).apply {
+                isOpaque = false
+                border = JBUI.Borders.empty(KiroUI.Spacing.large)
+            }
+
+            themeComboBox.maximumSize = KiroUI.scaledDimension(200, 30)
+            contentPanel.add(themeComboBox, BorderLayout.NORTH)
+            contentPanel.add(JBLabel("Chat panel color theme (Auto follows IDE theme)").apply {
+                foreground = JBColor.gray
+                border = JBUI.Borders.emptyTop(KiroUI.Spacing.medium)
+            }, BorderLayout.CENTER)
+
             add(contentPanel, BorderLayout.CENTER)
         }
 
@@ -197,14 +220,15 @@ class SettingsPanel(private val project: Project) {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
         }
-        
+
         headerLabel.alignmentX = Component.LEFT_ALIGNMENT
         pathCard.alignmentX = Component.LEFT_ALIGNMENT
         configDirCard.alignmentX = Component.LEFT_ALIGNMENT
         modelCard.alignmentX = Component.LEFT_ALIGNMENT
         languageCard.alignmentX = Component.LEFT_ALIGNMENT
+        themeCard.alignmentX = Component.LEFT_ALIGNMENT
         buttonPanel.alignmentX = Component.LEFT_ALIGNMENT
-        
+
         contentWrapper.add(headerLabel)
         contentWrapper.add(pathCard)
         contentWrapper.add(Box.createVerticalStrut(KiroUI.Spacing.large))
@@ -213,6 +237,8 @@ class SettingsPanel(private val project: Project) {
         contentWrapper.add(modelCard)
         contentWrapper.add(Box.createVerticalStrut(KiroUI.Spacing.large))
         contentWrapper.add(languageCard)
+        contentWrapper.add(Box.createVerticalStrut(KiroUI.Spacing.large))
+        contentWrapper.add(themeCard)
         contentWrapper.add(buttonPanel)
         contentWrapper.add(Box.createVerticalGlue())
 
@@ -229,6 +255,7 @@ class SettingsPanel(private val project: Project) {
         kiroConfigDirField.text = state.kiroConfigDir
         modelComboBox.selectedItem = state.defaultModel
         languageComboBox.selectedItem = reverseLanguageMap[state.language] ?: "English"
+        themeComboBox.selectedItem = reverseThemeMap[state.theme] ?: "Auto"
         updateConfigDirLabel(state.kiroConfigDir)
     }
 
@@ -237,14 +264,23 @@ class SettingsPanel(private val project: Project) {
         val oldLanguage = settings.state.language
         val newLanguage = languageMap[languageComboBox.selectedItem as String] ?: "en"
         val languageChanged = oldLanguage != newLanguage
-        
+
+        val oldTheme = settings.state.theme
+        val newTheme = themeMap[themeComboBox.selectedItem as String] ?: "auto"
+        val themeChanged = oldTheme != newTheme
+
         settings.state.kiroCommand = kiroPathField.text.ifBlank { "kiro-cli" }
         settings.state.kiroConfigDir = kiroConfigDirField.text
         settings.state.defaultModel = modelComboBox.selectedItem as String
         settings.state.language = newLanguage
+        settings.state.theme = newTheme
 
         updateConfigDirLabel(settings.state.kiroConfigDir)
-        
+
+        if (themeChanged) {
+            KiroSettings.notifyThemeChange()
+        }
+
         if (languageChanged) {
             KiroUI.showInfoDialog(
                 panel,

@@ -14,7 +14,8 @@ class KiroSettings : PersistentStateComponent<KiroSettings.State> {
         var kiroCommand: String = "kiro-cli",
         var defaultModel: String = "Auto",
         var language: String = "en", // ko, en
-        var kiroConfigDir: String = "" // 빈 문자열이면 기본 경로 (~/.kiro) 사용
+        var kiroConfigDir: String = "", // 빈 문자열이면 기본 경로 (~/.kiro) 사용
+        var theme: String = "auto" // auto, light, dark
     )
 
     private var myState = State()
@@ -23,7 +24,21 @@ class KiroSettings : PersistentStateComponent<KiroSettings.State> {
     override fun loadState(state: State) { myState = state }
 
     companion object {
+        private val themeListeners = mutableListOf<() -> Unit>()
+
         fun getInstance(): KiroSettings =
             ApplicationManager.getApplication().getService(KiroSettings::class.java)
+
+        fun onThemeChange(callback: () -> Unit) {
+            themeListeners.add(callback)
+        }
+
+        fun removeThemeListener(callback: () -> Unit) {
+            themeListeners.remove(callback)
+        }
+
+        fun notifyThemeChange() {
+            themeListeners.forEach { it() }
+        }
     }
 }

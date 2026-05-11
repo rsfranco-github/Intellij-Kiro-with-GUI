@@ -8,11 +8,12 @@ class KiroSettingsTest {
     @Test
     fun `default state should have correct values`() {
         val state = KiroSettings.State()
-        
+
         assertEquals("kiro-cli", state.kiroCommand)
         assertEquals("Auto", state.defaultModel)
         assertEquals("en", state.language)
         assertEquals("", state.kiroConfigDir)
+        assertEquals("auto", state.theme)
     }
 
     @Test
