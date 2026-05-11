@@ -55,7 +55,7 @@ object KiroCliValidator {
                 cliPath = null,
                 version = null,
                 authenticated = false,
-                errorMessage = "kiro-cli를 찾을 수 없습니다. 설치 경로를 확인하세요."
+                errorMessage = "kiro-cli not found. Check installation path."
             )
         }
 

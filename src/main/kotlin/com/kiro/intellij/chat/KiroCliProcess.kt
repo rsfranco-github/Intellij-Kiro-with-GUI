@@ -25,7 +25,7 @@ class KiroCliProcess(private val project: Project) {
 
     fun sendMessage(message: String, onChunk: (String) -> Unit, onDone: () -> Unit, onError: (String) -> Unit) {
         if (!isBusy.compareAndSet(false, true)) {
-            onError("이전 요청이 아직 처리 중입니다.")
+            onError("Previous request is still in progress.")
             return
         }
 
@@ -42,7 +42,7 @@ class KiroCliProcess(private val project: Project) {
             try {
                 val validation = KiroCliValidator.validate()
                 if (!validation.cliFound) {
-                    onError(validation.errorMessage ?: "kiro-cli를 찾을 수 없습니다.")
+                    onError(validation.errorMessage ?: "kiro-cli not found.")
                     onDone()
                     return@Thread
                 }
@@ -125,7 +125,7 @@ class KiroCliProcess(private val project: Project) {
 
                 if (!completed) {
                     process.destroyForcibly()
-                    onError("kiro-cli 응답 시간이 초과되었습니다 (5분). 프로세스를 종료합니다.")
+                    onError("kiro-cli response timed out (5 min). Process terminated.")
                     consecutiveErrors.incrementAndGet()
                 } else {
                     val exitCode = process.exitValue()
@@ -177,47 +177,47 @@ class KiroCliProcess(private val project: Project) {
             "/model" -> {
                 if (args.isBlank()) {
                     val currentModel = model ?: KiroSettings.getInstance().state.defaultModel
-                    onChunk("현재 모델: $currentModel\n")
-                    onChunk("모델을 변경하려면 입력창 하단의 모델 선택 버튼을 사용하세요.\n")
-                    onChunk("또는 /model <모델명> 형식으로 직접 지정할 수 있습니다.\n")
-                    onChunk("예: /model claude-sonnet-4\n")
+                    onChunk("Current model: $currentModel\n")
+                    onChunk("Use the model selector button at the bottom of the input to change models.\n")
+                    onChunk("Or specify directly with /model <model-name>.\n")
+                    onChunk("Example: /model claude-sonnet-4\n")
                     onDone()
                     return true
                 } else {
                     model = args.trim()
-                    onChunk("모델이 '${args.trim()}'(으)로 변경되었습니다.\n")
+                    onChunk("Model changed to '${args.trim()}'.\n")
                     onDone()
                     return true
                 }
             }
             "/clear" -> {
                 resetSession()
-                onChunk("대화 기록이 초기화되었습니다.\n")
+                onChunk("Conversation history cleared.\n")
                 onDone()
                 return true
             }
             "/help" -> {
-                onChunk("사용 가능한 슬래시 커맨드:\n")
-                onChunk("/model [모델명] - 현재 모델 확인 또는 변경\n")
-                onChunk("/clear - 대화 기록 초기화\n")
-                onChunk("/context - 컨텍스트 파일 관리\n")
-                onChunk("/tools - 도구 및 권한 보기\n")
-                onChunk("/usage - 사용량 정보\n")
-                onChunk("/mcp - MCP 서버 목록\n")
-                onChunk("/compact - 대화 요약\n")
-                onChunk("/help - 도움말\n")
+                onChunk("Available slash commands:\n")
+                onChunk("/model [model-name] - View or change current model\n")
+                onChunk("/clear - Clear conversation history\n")
+                onChunk("/context - Manage context files\n")
+                onChunk("/tools - View tools and permissions\n")
+                onChunk("/usage - Usage information\n")
+                onChunk("/mcp - List MCP servers\n")
+                onChunk("/compact - Summarize conversation\n")
+                onChunk("/help - Show help\n")
                 onDone()
                 return true
             }
             "/status" -> {
                 val validation = KiroCliValidator.validate(forceRefresh = true)
-                onChunk("=== Kiro CLI 상태 ===\n")
-                onChunk("CLI 발견: ${if (validation.cliFound) "✓" else "✗"}\n")
-                if (validation.cliPath != null) onChunk("경로: ${validation.cliPath}\n")
-                if (validation.version != null) onChunk("버전: ${validation.version}\n")
-                onChunk("인증: ${if (validation.authenticated) "✓ 로그인됨" else "✗ 미인증"}\n")
-                onChunk("연속 에러: ${consecutiveErrors.get()}회\n")
-                if (validation.errorMessage != null) onChunk("오류: ${validation.errorMessage}\n")
+                onChunk("=== Kiro CLI Status ===\n")
+                onChunk("CLI found: ${if (validation.cliFound) "✓" else "✗"}\n")
+                if (validation.cliPath != null) onChunk("Path: ${validation.cliPath}\n")
+                if (validation.version != null) onChunk("Version: ${validation.version}\n")
+                onChunk("Auth: ${if (validation.authenticated) "✓ Logged in" else "✗ Not authenticated"}\n")
+                onChunk("Consecutive errors: ${consecutiveErrors.get()}\n")
+                if (validation.errorMessage != null) onChunk("Error: ${validation.errorMessage}\n")
                 onDone()
                 return true
             }
@@ -301,15 +301,15 @@ class KiroCliProcess(private val project: Project) {
 
         fun classifyExitCode(exitCode: Int, hasOutput: Boolean): String {
             return when {
-                exitCode == 1 && !hasOutput -> "kiro-cli 실행에 실패했습니다. 인증 상태를 확인하세요. (/status)"
-                exitCode == 1 -> "kiro-cli가 오류와 함께 종료되었습니다 (code: $exitCode)"
-                exitCode == 2 -> "kiro-cli 명령어 인수가 올바르지 않습니다."
-                exitCode == 126 -> "kiro-cli 실행 권한이 없습니다. 파일 권한을 확인하세요."
-                exitCode == 127 -> "kiro-cli를 찾을 수 없습니다. 설치 경로를 확인하세요."
-                exitCode == 130 -> "사용자에 의해 중단되었습니다."
-                exitCode == 137 -> "kiro-cli 프로세스가 강제 종료되었습니다 (메모리 부족 가능성)."
-                exitCode == 143 -> "kiro-cli 프로세스가 종료 신호를 받았습니다."
-                else -> "kiro-cli가 비정상 종료되었습니다 (exit code: $exitCode)"
+                exitCode == 1 && !hasOutput -> "kiro-cli execution failed. Check authentication status. (/status)"
+                exitCode == 1 -> "kiro-cli exited with error (code: $exitCode)"
+                exitCode == 2 -> "kiro-cli command arguments are invalid."
+                exitCode == 126 -> "No permission to execute kiro-cli. Check file permissions."
+                exitCode == 127 -> "kiro-cli not found. Check installation path."
+                exitCode == 130 -> "Interrupted by user."
+                exitCode == 137 -> "kiro-cli process was forcibly terminated (possibly out of memory)."
+                exitCode == 143 -> "kiro-cli process received termination signal."
+                else -> "kiro-cli exited abnormally (exit code: $exitCode)"
             }
         }
 
@@ -317,15 +317,15 @@ class KiroCliProcess(private val project: Project) {
             val message = e.message ?: ""
             return when {
                 e is java.io.IOException && message.contains("No such file", ignoreCase = true) ->
-                    "kiro-cli를 찾을 수 없습니다. 설정에서 경로를 확인하세요."
+                    "kiro-cli not found. Check the path in settings."
                 e is java.io.IOException && message.contains("Permission denied", ignoreCase = true) ->
-                    "kiro-cli 실행 권한이 없습니다."
+                    "No permission to execute kiro-cli."
                 e is java.io.IOException ->
-                    "kiro-cli 실행 중 I/O 오류: $message"
+                    "I/O error while running kiro-cli: $message"
                 e is InterruptedException ->
-                    "요청이 중단되었습니다."
+                    "Request was interrupted."
                 else ->
-                    "예상치 못한 오류: $message"
+                    "Unexpected error: $message"
             }
         }
     }

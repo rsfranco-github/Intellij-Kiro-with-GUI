@@ -33,37 +33,37 @@ class KiroCliProcessTest {
     @Test
     fun `classifyExitCode 1 without output should suggest auth check`() {
         val msg = KiroCliProcess.classifyExitCode(1, hasOutput = false)
-        assertTrue(msg.contains("인증"), "Should mention authentication: $msg")
+        assertTrue(msg.contains("authentication") || msg.contains("Check"), "Should mention authentication: $msg")
     }
 
     @Test
     fun `classifyExitCode 1 with output should mention error`() {
         val msg = KiroCliProcess.classifyExitCode(1, hasOutput = true)
-        assertTrue(msg.contains("오류"), "Should mention error: $msg")
+        assertTrue(msg.contains("error"), "Should mention error: $msg")
     }
 
     @Test
     fun `classifyExitCode 126 should mention permission`() {
         val msg = KiroCliProcess.classifyExitCode(126, hasOutput = false)
-        assertTrue(msg.contains("권한"), "Should mention permission: $msg")
+        assertTrue(msg.contains("permission") || msg.contains("Permission"), "Should mention permission: $msg")
     }
 
     @Test
     fun `classifyExitCode 127 should mention not found`() {
         val msg = KiroCliProcess.classifyExitCode(127, hasOutput = false)
-        assertTrue(msg.contains("찾을 수 없습니다"), "Should mention not found: $msg")
+        assertTrue(msg.contains("not found"), "Should mention not found: $msg")
     }
 
     @Test
     fun `classifyExitCode 130 should mention user interruption`() {
         val msg = KiroCliProcess.classifyExitCode(130, hasOutput = false)
-        assertTrue(msg.contains("중단"), "Should mention interruption: $msg")
+        assertTrue(msg.contains("Interrupted") || msg.contains("interrupted"), "Should mention interruption: $msg")
     }
 
     @Test
     fun `classifyExitCode 137 should mention OOM`() {
         val msg = KiroCliProcess.classifyExitCode(137, hasOutput = false)
-        assertTrue(msg.contains("강제 종료") || msg.contains("메모리"), "Should mention kill/OOM: $msg")
+        assertTrue(msg.contains("terminated") || msg.contains("memory"), "Should mention kill/OOM: $msg")
     }
 
     @Test
@@ -76,21 +76,21 @@ class KiroCliProcessTest {
     fun `classifyException for IOException with No such file`() {
         val e = java.io.IOException("No such file or directory")
         val msg = KiroCliProcess.classifyException(e)
-        assertTrue(msg.contains("찾을 수 없습니다"), "Should mention not found: $msg")
+        assertTrue(msg.contains("not found"), "Should mention not found: $msg")
     }
 
     @Test
     fun `classifyException for IOException with Permission denied`() {
         val e = java.io.IOException("Permission denied")
         val msg = KiroCliProcess.classifyException(e)
-        assertTrue(msg.contains("권한"), "Should mention permission: $msg")
+        assertTrue(msg.contains("permission") || msg.contains("Permission"), "Should mention permission: $msg")
     }
 
     @Test
     fun `classifyException for InterruptedException`() {
         val e = InterruptedException("thread interrupted")
         val msg = KiroCliProcess.classifyException(e)
-        assertTrue(msg.contains("중단"), "Should mention interruption: $msg")
+        assertTrue(msg.contains("interrupted") || msg.contains("Interrupted"), "Should mention interruption: $msg")
     }
 
     @Test
@@ -104,6 +104,6 @@ class KiroCliProcessTest {
     fun `classifyException for unknown exception`() {
         val e = RuntimeException("something went wrong")
         val msg = KiroCliProcess.classifyException(e)
-        assertTrue(msg.contains("예상치 못한"), "Should mention unexpected: $msg")
+        assertTrue(msg.contains("Unexpected") || msg.contains("unexpected"), "Should mention unexpected: $msg")
     }
 }
