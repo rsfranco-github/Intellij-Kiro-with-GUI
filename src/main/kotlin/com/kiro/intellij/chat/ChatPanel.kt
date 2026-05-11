@@ -283,7 +283,7 @@ body {
     <div id="input-wrapper">
         <div id="input" contenteditable="true" data-placeholder=""></div>
         <div id="input-toolbar">
-            <button id="attach-btn" title="이미지 첨부 (Ctrl+V)">
+            <button id="attach-btn" title="Attach image (Ctrl+V)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
                 </svg>
@@ -292,7 +292,7 @@ body {
                 <button id="model-btn">Auto ▾</button>
                 <div id="model-menu"></div>
             </div>
-            <button id="send-btn" onclick="sendMessage()" title="전송 (Enter)">
+            <button id="send-btn" onclick="sendMessage()" title="Send (Enter)">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
         </div>
@@ -469,12 +469,12 @@ function sendMessage() {
     // 현재 활성화된 파일 항상 컨텍스트에 추가
     const activeFile = openFiles.find(f => f.active);
     if (activeFile) {
-        fullMessage = '[현재 파일: ' + activeFile.relativePath + ']\n' + fullMessage;
+        fullMessage = '[Current file: ' + activeFile.relativePath + ']\n' + fullMessage;
     }
     
     if (attachedImages.length > 0) {
         const paths = attachedImages.map(img => img.savedPath || img.name).join(', ');
-        fullMessage = '[첨부 이미지: ' + paths + ']\n' + fullMessage;
+        fullMessage = '[Attached images: ' + paths + ']\n' + fullMessage;
     }
     
     addUserMessage(text);
@@ -482,7 +482,7 @@ function sendMessage() {
     attachedImages = []; imagePreview.innerHTML = '';
     setEnabled(false);
     fetch(API + '/api/send', { method: 'POST', body: SESSION + '\n' + fullMessage })
-        .catch(err => { addErrorMessage('전송 실패: ' + err.message); setEnabled(true); });
+        .catch(err => { addErrorMessage('Send failed: ' + err.message); setEnabled(true); });
 }
 
 function addUserMessage(text) {
@@ -491,7 +491,7 @@ function addUserMessage(text) {
     const div = document.createElement('div');
     div.className = 'msg user'; div.textContent = text;
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn'; copyBtn.textContent = '📋'; copyBtn.title = '복사';
+    copyBtn.className = 'copy-btn'; copyBtn.textContent = '📋'; copyBtn.title = 'Copy';
     copyBtn.onclick = () => { navigator.clipboard.writeText(text); copyBtn.textContent = '✓'; setTimeout(() => copyBtn.textContent = '📋', 1000); };
     wrap.appendChild(div); wrap.appendChild(copyBtn);
     messagesDiv.appendChild(wrap); scrollToBottom();
@@ -520,7 +520,7 @@ function ensureAssistantBubble() {
     currentAssistantDiv = document.createElement('div');
     currentAssistantDiv.className = 'msg assistant streaming';
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn'; copyBtn.textContent = '📋'; copyBtn.title = '복사';
+    copyBtn.className = 'copy-btn'; copyBtn.textContent = '📋'; copyBtn.title = 'Copy';
     copyBtn.onclick = () => { navigator.clipboard.writeText(currentContent.replace(/▸\s*Time:\s*[\d.]+s/g, '').trim()); copyBtn.textContent = '✓'; setTimeout(() => copyBtn.textContent = '📋', 1000); };
     currentAssistantWrap.appendChild(currentAssistantDiv);
     currentAssistantWrap.appendChild(copyBtn);
@@ -801,12 +801,12 @@ function setEnabled(en) {
         sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
         sendBtn.style.background = '#007acc';
         sendBtn.onclick = () => sendMessage();
-        sendBtn.title = '전송 (Enter)';
+        sendBtn.title = 'Send (Enter)';
     } else {
         sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
         sendBtn.style.background = '#6e6e6e';
         sendBtn.onclick = () => stopGeneration();
-        sendBtn.title = '중단';
+        sendBtn.title = 'Stop';
     }
     sendBtn.disabled = false;
     if (en) input.focus(); 
@@ -822,29 +822,29 @@ function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 
 // --- 슬래시 커맨드 목록 ---
 const SLASH_COMMANDS = [
-    { cmd: '/quit', desc: '앱 종료' },
-    { cmd: '/clear', desc: '대화 기록 삭제' },
-    { cmd: '/agent', desc: '에이전트 관리' },
-    { cmd: '/chat', desc: '저장된 대화 관리' },
-    { cmd: '/context', desc: '컨텍스트 파일 관리' },
-    { cmd: '/code', desc: 'LSP 코드 인텔리전스' },
-    { cmd: '/editor', desc: '에디터로 프롬프트 작성' },
-    { cmd: '/reply', desc: '마지막 응답에 답장' },
-    { cmd: '/compact', desc: '대화 요약하여 컨텍스트 확보' },
-    { cmd: '/tools', desc: '도구 및 권한 보기' },
-    { cmd: '/issue', desc: 'GitHub 이슈 생성' },
-    { cmd: '/logdump', desc: '로그 파일 생성' },
-    { cmd: '/changelog', desc: '변경 로그 보기' },
-    { cmd: '/prompts', desc: '프롬프트 보기' },
-    { cmd: '/hooks', desc: '컨텍스트 훅 보기' },
-    { cmd: '/usage', desc: '사용량 및 크레딧 정보' },
-    { cmd: '/mcp', desc: 'MCP 서버 목록' },
-    { cmd: '/model', desc: '모델 선택' },
-    { cmd: '/experiment', desc: '실험 기능 토글' },
-    { cmd: '/plan', desc: 'Plan 에이전트로 전환' },
-    { cmd: '/todos', desc: '할 일 목록 관리' },
-    { cmd: '/paste', desc: '클립보드 이미지 붙여넣기' },
-    { cmd: '/help', desc: '도움말' },
+    { cmd: '/quit', desc: 'Quit the app' },
+    { cmd: '/clear', desc: 'Clear conversation history' },
+    { cmd: '/agent', desc: 'Manage agents' },
+    { cmd: '/chat', desc: 'Manage saved conversations' },
+    { cmd: '/context', desc: 'Manage context files' },
+    { cmd: '/code', desc: 'LSP code intelligence' },
+    { cmd: '/editor', desc: 'Compose prompt in editor' },
+    { cmd: '/reply', desc: 'Reply to last response' },
+    { cmd: '/compact', desc: 'Summarize conversation to free context' },
+    { cmd: '/tools', desc: 'View tools and permissions' },
+    { cmd: '/issue', desc: 'Create GitHub issue' },
+    { cmd: '/logdump', desc: 'Generate log file' },
+    { cmd: '/changelog', desc: 'View changelog' },
+    { cmd: '/prompts', desc: 'View prompts' },
+    { cmd: '/hooks', desc: 'View context hooks' },
+    { cmd: '/usage', desc: 'Usage and credits info' },
+    { cmd: '/mcp', desc: 'List MCP servers' },
+    { cmd: '/model', desc: 'Select model' },
+    { cmd: '/experiment', desc: 'Toggle experimental features' },
+    { cmd: '/plan', desc: 'Switch to Plan agent' },
+    { cmd: '/todos', desc: 'Manage todo list' },
+    { cmd: '/paste', desc: 'Paste image from clipboard' },
+    { cmd: '/help', desc: 'Show help' },
 ];
 
 // 파일 확장자별 아이콘
