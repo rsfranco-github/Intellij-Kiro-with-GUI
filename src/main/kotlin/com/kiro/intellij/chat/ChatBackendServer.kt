@@ -47,6 +47,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         server.createContext("/api/project-files") { exchange -> handleProjectFiles(exchange) }
         server.createContext("/api/agents") { exchange -> handleAgents(exchange) }
         server.createContext("/api/i18n") { exchange -> handleI18n(exchange) }
+        server.createContext("/ui") { exchange -> handleUi(exchange) }
 
         server.start()
         log.info("Chat backend server started on port $port")
@@ -409,6 +410,32 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
 
     private data class ProjectFileInfo(val name: String, val path: String, val dir: String, val ext: String)
     private data class AgentInfo(val name: String, val description: String, val path: String)
+
+    // 세션별 HTML 저장 (UI 서빙용)
+    private val sessionHtmlMap = ConcurrentHashMap<String, String>()
+
+    fun setSessionHtml(sessionId: String, html: String) {
+        sessionHtmlMap[sessionId] = html
+    }
+
+    fun removeSessionHtml(sessionId: String) {
+        sessionHtmlMap.remove(sessionId)
+    }
+
+    /**
+     * 세션별 채팅 UI HTML 서빙. JCEF에서 same-origin fetch를 위해 사용.
+     */
+    private fun handleUi(exchange: HttpExchange) {
+        setCorsHeaders(exchange)
+        val sessionId = exchange.requestURI.query?.substringAfter("session=")?.substringBefore("&") ?: ""
+        val html = sessionHtmlMap[sessionId]
+        if (html == null) {
+            sendResponse(exchange, 404, "Session not found")
+            return
+        }
+        exchange.responseHeaders.set("Content-Type", "text/html; charset=utf-8")
+        sendResponse(exchange, 200, html)
+    }
 
     /**
      * 다국어 메시지 반환 (채팅 UI용)

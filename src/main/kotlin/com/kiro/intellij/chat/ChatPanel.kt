@@ -34,7 +34,9 @@ class ChatPanel(
     private fun initBrowser() {
         browser = JBCefBrowser().also { b ->
             Disposer.register(this, b)
-            b.loadHTML(buildHtml(backendServer.port, sessionId))
+            val html = buildHtml(backendServer.port, sessionId)
+            backendServer.setSessionHtml(sessionId, html)
+            b.loadURL("http://127.0.0.1:${backendServer.port}/ui?session=$sessionId")
             mainPanel.add(b.component, BorderLayout.CENTER)
         }
     }
@@ -50,6 +52,7 @@ class ChatPanel(
 
     override fun dispose() {
         backendServer.removeSession(sessionId)
+        backendServer.removeSessionHtml(sessionId)
     }
 
     private fun buildHtml(port: Int, sessionId: String): String = """
