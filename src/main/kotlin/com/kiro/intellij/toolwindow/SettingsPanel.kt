@@ -228,14 +228,14 @@ class SettingsPanel(private val project: Project) {
         kiroPathField.text = state.kiroCommand
         kiroConfigDirField.text = state.kiroConfigDir
         modelComboBox.selectedItem = state.defaultModel
-        languageComboBox.selectedItem = reverseLanguageMap[state.language] ?: "한국어"
+        languageComboBox.selectedItem = reverseLanguageMap[state.language] ?: "English"
         updateConfigDirLabel(state.kiroConfigDir)
     }
 
     private fun saveSettings() {
         val settings = KiroSettings.getInstance()
         val oldLanguage = settings.state.language
-        val newLanguage = languageMap[languageComboBox.selectedItem as String] ?: "ko"
+        val newLanguage = languageMap[languageComboBox.selectedItem as String] ?: "en"
         val languageChanged = oldLanguage != newLanguage
         
         settings.state.kiroCommand = kiroPathField.text.ifBlank { "kiro-cli" }
@@ -246,14 +246,11 @@ class SettingsPanel(private val project: Project) {
         updateConfigDirLabel(settings.state.kiroConfigDir)
         
         if (languageChanged) {
-            // 언어 변경 시: 재시작 필요 안내 (새 언어로 표시)
-            val message = if (newLanguage == "en") {
-                "Settings saved.\n\nPlease restart IDE to apply language change."
-            } else {
-                "설정이 저장되었습니다.\n\n언어 변경을 적용하려면 IDE를 재시작해주세요."
-            }
-            val title = if (newLanguage == "en") "Restart Required" else "재시작 필요"
-            KiroUI.showInfoDialog(panel, message, title)
+            KiroUI.showInfoDialog(
+                panel,
+                "Settings saved.\n\nPlease restart IDE to apply language change.",
+                "Restart Required"
+            )
         } else {
             KiroUI.showInfoDialog(panel, KiroMessages["settings.saved"], KiroMessages["settings.saveComplete"])
         }

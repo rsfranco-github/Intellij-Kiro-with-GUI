@@ -11,7 +11,7 @@ class KiroSettingsTest {
         
         assertEquals("kiro-cli", state.kiroCommand)
         assertEquals("Auto", state.defaultModel)
-        assertEquals("ko", state.language)
+        assertEquals("en", state.language)
         assertEquals("", state.kiroConfigDir)
     }
 
