@@ -26,6 +26,20 @@ class SettingsPanel(private val project: Project) {
                 inputDir
             }
         }
+
+        /**
+         * Builds the config dir label text based on whether a custom dir is set.
+         * Extracted for testability.
+         */
+        fun buildConfigDirLabel(configDir: String, currentPathPrefix: String, defaultSuffix: String): String {
+            val effectivePath = resolveEffectiveConfigDir(configDir)
+            val isCustom = configDir.isNotBlank()
+            return if (isCustom) {
+                "$currentPathPrefix $effectivePath"
+            } else {
+                "$currentPathPrefix $effectivePath $defaultSuffix"
+            }
+        }
     }
 
     private val panel = JPanel(BorderLayout())

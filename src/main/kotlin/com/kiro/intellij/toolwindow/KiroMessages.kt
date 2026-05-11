@@ -7,7 +7,7 @@ import com.kiro.intellij.settings.KiroSettings
  */
 object KiroMessages {
     
-    private val ko = mapOf(
+    internal val koMap = mapOf(
         // 탭 이름
         "tab.chat" to "채팅",
         "tab.manage" to "관리",
@@ -141,7 +141,7 @@ object KiroMessages {
         "common.remove" to "제거"
     )
     
-    private val en = mapOf(
+    internal val enMap = mapOf(
         // 탭 이름
         "tab.chat" to "Chat",
         "tab.manage" to "Manage",
@@ -277,7 +277,7 @@ object KiroMessages {
     
     operator fun get(key: String): String {
         val lang = KiroSettings.getInstance().state.language
-        val messages = if (lang == "en") en else ko
+        val messages = if (lang == "en") enMap else koMap
         return messages[key] ?: key
     }
     

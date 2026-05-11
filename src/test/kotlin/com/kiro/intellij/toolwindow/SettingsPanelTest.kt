@@ -55,33 +55,17 @@ class SettingsPanelTest {
 
     @Test
     fun `label text should show default suffix when input is blank`() {
-        val configDir = ""
-        val effectivePath = SettingsPanel.resolveEffectiveConfigDir(configDir)
-        val isCustom = configDir.isNotBlank()
+        val labelText = SettingsPanel.buildConfigDirLabel("", "Current path:", "(default)")
 
-        val labelText = if (isCustom) {
-            "현재 경로: $effectivePath"
-        } else {
-            "현재 경로: $effectivePath (기본)"
-        }
-
-        assertTrue(labelText.contains("(기본)"), "Blank input should show (기본): $labelText")
+        assertTrue(labelText.contains("(default)"), "Blank input should show (default): $labelText")
         assertTrue(labelText.contains("/.kiro"))
     }
 
     @Test
     fun `label text should not show default suffix when custom path is set`() {
-        val configDir = "/custom/path"
-        val effectivePath = SettingsPanel.resolveEffectiveConfigDir(configDir)
-        val isCustom = configDir.isNotBlank()
+        val labelText = SettingsPanel.buildConfigDirLabel("/custom/path", "Current path:", "(default)")
 
-        val labelText = if (isCustom) {
-            "현재 경로: $effectivePath"
-        } else {
-            "현재 경로: $effectivePath (기본)"
-        }
-
-        assertFalse(labelText.contains("(기본)"), "Custom path should not show (기본): $labelText")
+        assertFalse(labelText.contains("(default)"), "Custom path should not show (default): $labelText")
         assertTrue(labelText.contains("/custom/path"))
     }
 
