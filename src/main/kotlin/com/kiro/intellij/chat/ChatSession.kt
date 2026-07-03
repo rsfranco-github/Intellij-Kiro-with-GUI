@@ -20,6 +20,13 @@ class ChatSession(
         this.streamWriter = writer
     }
 
+    /** 해당 writer가 현재 등록된 writer일 때만 해제 (재연결로 등록된 새 writer 보호) */
+    fun clearStreamWriter(writer: (event: String, data: String) -> Unit) {
+        if (this.streamWriter === writer) {
+            this.streamWriter = null
+        }
+    }
+
     fun sendMessage(message: String) {
         streamWriter?.invoke("start", "")
 

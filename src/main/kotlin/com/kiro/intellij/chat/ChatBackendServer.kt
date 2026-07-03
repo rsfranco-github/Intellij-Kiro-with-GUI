@@ -33,7 +33,8 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     init {
         Disposer.register(parentDisposable, this)
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.executor = Executors.newFixedThreadPool(4)
+        // SSE 연결(/api/stream)이 스레드를 점유하므로 고정 풀 사용 시 고갈됨 → cached pool
+        server.executor = Executors.newCachedThreadPool()
         port = server.address.port
 
         server.createContext("/api/send") { exchange -> handleSend(exchange) }
@@ -119,7 +120,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         exchange.sendResponseHeaders(200, 0)
 
         val out = exchange.responseBody
-        session.setStreamWriter { event, data ->
+        val writer: (String, String) -> Unit = { event, data ->
             try {
                 val escaped = data.replace("\n", "\ndata: ")
                 out.write("event: $event\ndata: $escaped\n\n".toByteArray())
@@ -128,8 +129,9 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                 // 연결 끊김
             }
         }
+        session.setStreamWriter(writer)
 
-        // 연결 유지 (webview가 끊을 때까지)
+        // 연결 유지 (webview가 끊을 때까지, ping 실패 시 종료)
         try {
             while (!Thread.currentThread().isInterrupted) {
                 Thread.sleep(30000)
@@ -138,8 +140,8 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
             }
         } catch (_: Exception) {
         } finally {
-            session.setStreamWriter(null)
-            out.close()
+            session.clearStreamWriter(writer)
+            try { out.close() } catch (_: Exception) {}
         }
     }
 
