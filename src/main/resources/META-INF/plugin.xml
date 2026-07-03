@@ -24,6 +24,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.2.2</h3>
+        <ul>
+            <li>Fix: <code>NoSuchMethodError: LafManager.removeLafManagerListener</code> on 2026.2 EAP (build 262+) &mdash; theme listener now uses the message bus API</li>
+            <li>Fix: Chat could stop responding after SSE reconnections (e.g. Remote Development) due to backend thread pool exhaustion and a stream writer race</li>
+        </ul>
+
         <h3>0.2.1</h3>
         <ul>
             <li><b>Light theme support</b> &mdash; Chat panel now supports light theme with new Auto/Light/Dark setting (Auto follows IDE theme)</li>
