@@ -10,6 +10,7 @@ import com.intellij.util.ui.JBUI
 import com.kiro.intellij.settings.KiroCliResolver
 import com.kiro.intellij.settings.KiroSettings
 import java.awt.*
+import java.io.File
 import javax.swing.*
 
 /**
@@ -342,9 +343,9 @@ class SettingsPanel(private val project: Project) {
     }
 
     private fun resolveKiroCliPath(command: String): String {
-        // KiroCliResolver로 실제 경로 확인
+        // KiroCliResolver로 실제 경로 확인 (Windows 경로는 "/"로 시작하지 않으므로 실행 가능 여부로 판정)
         val resolved = KiroCliResolver.resolve()
-        return if (resolved.startsWith("/")) {
+        return if (File(resolved).canExecute()) {
             "📍 $resolved"
         } else {
             "⚠️ ${KiroMessages["settings.cliNotFound"]}"

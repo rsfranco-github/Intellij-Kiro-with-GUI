@@ -4,10 +4,37 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Path
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class KiroCliResolverTest {
+
+    @Test
+    fun `resolveConfiguredPath accepts absolute executable path`(@TempDir tempDir: Path) {
+        val exe = File(tempDir.toFile(), "kiro-cli").apply {
+            writeText("#!/bin/sh\necho test")
+            setExecutable(true)
+        }
+        // 플랫폼 절대 경로(File.isAbsolute)면 그대로 반환 — Windows의 C:\... 도 동일 규약
+        assertEquals(exe.absolutePath, KiroCliResolver.resolveConfiguredPath(exe.absolutePath))
+    }
+
+    @Test
+    fun `resolveConfiguredPath rejects relative command name`() {
+        assertNull(KiroCliResolver.resolveConfiguredPath("kiro-cli"))
+    }
+
+    @Test
+    fun `resolveConfiguredPath rejects nonexistent absolute path`() {
+        assertNull(KiroCliResolver.resolveConfiguredPath("/nonexistent/path/kiro-cli-xyz"))
+    }
+
+    @Test
+    fun `resolveConfiguredPath rejects blank value`() {
+        assertNull(KiroCliResolver.resolveConfiguredPath(""))
+    }
 
     @Test
     fun `configureProcessBuilder adds extra paths to PATH`() {

@@ -29,14 +29,22 @@ object KiroCliResolver {
      */
     fun resolve(): String {
         val configured = KiroSettings.getInstance().state.kiroCommand
-        
+
         // 절대 경로가 설정되어 있으면 그대로 사용
-        if (configured.startsWith("/") && File(configured).canExecute()) {
-            return configured
-        }
-        
+        resolveConfiguredPath(configured)?.let { return it }
+
         val commandName = configured.ifBlank { "kiro-cli" }
         return resolveCommand(commandName)
+    }
+
+    /**
+     * 설정값이 실행 가능한 절대 경로면 그대로 반환, 아니면 null.
+     * File.isAbsolute로 판정하므로 Windows 드라이브 경로(C:\...)도 인식한다.
+     */
+    internal fun resolveConfiguredPath(configured: String): String? {
+        if (configured.isBlank()) return null
+        val file = File(configured)
+        return if (file.isAbsolute && file.canExecute()) configured else null
     }
 
     /**
@@ -83,7 +91,7 @@ object KiroCliResolver {
             .filter { File(it).isDirectory }
         
         if (extraPaths.isNotEmpty()) {
-            env["PATH"] = (extraPaths + currentPath).joinToString(":")
+            env["PATH"] = (extraPaths + currentPath).joinToString(File.pathSeparator)
         }
         
         return pb
