@@ -1,8 +1,8 @@
 package com.kiro.intellij.chat
 
-import com.intellij.ide.ui.LafManager
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.JBColor
@@ -60,10 +60,9 @@ class ChatPanel(
                 browser?.cefBrowser?.executeJavaScript("setTheme('$newClass')", "", 0)
             }
         }
-        LafManager.getInstance().addLafManagerListener(lafListener)
-        Disposer.register(this) {
-            LafManager.getInstance().removeLafManagerListener(lafListener)
-        }
+        // LafManager.add/removeLafManagerListener는 2026.2(build 262)에서 제거됨 → 메시지 버스 구독 사용
+        ApplicationManager.getApplication().messageBus.connect(this)
+            .subscribe(LafManagerListener.TOPIC, lafListener)
 
         // Settings에서 테마 변경 시 즉시 반영
         val themeChangeCallback: () -> Unit = {
