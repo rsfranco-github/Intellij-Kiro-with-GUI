@@ -24,6 +24,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.2.3</h3>
+        <ul>
+            <li>Fix: Windows absolute paths (<code>C:\...</code>) are now recognized when setting the kiro-cli path &mdash; no more false "kiro-cli not found" warning and no need for the <code>\</code>-prefix workaround</li>
+            <li>Fix: PATH environment for spawned processes now uses the platform path separator (<code>;</code> on Windows)</li>
+        </ul>
+
         <h3>0.2.2</h3>
         <ul>
             <li>Fix: <code>NoSuchMethodError: LafManager.removeLafManagerListener</code> on 2026.2 EAP (build 262+) &mdash; theme listener now uses the message bus API</li>
