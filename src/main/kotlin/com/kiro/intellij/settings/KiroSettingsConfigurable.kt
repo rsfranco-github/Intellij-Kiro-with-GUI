@@ -18,8 +18,9 @@ class KiroSettingsConfigurable : Configurable {
         val settings = KiroSettings.getInstance().state
         commandField = TextFieldWithBrowseButton().apply {
             text = settings.kiroCommand
-            addBrowseFolderListener(null, "Path to kiro-cli executable", null,
-                FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor())
+            addBrowseFolderListener(null,
+                FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
+                    .withDescription("Path to kiro-cli executable"))
         }
         modelCombo = javax.swing.JComboBox(models).apply {
             selectedItem = settings.defaultModel

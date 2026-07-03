@@ -294,7 +294,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                 val files = mutableListOf<ProjectFileInfo>()
                 val basePath = project.basePath ?: ""
 
-                ReadAction.run<Exception> {
+                ReadAction.nonBlocking<Unit> {
                     val fileIndex = ProjectFileIndex.getInstance(project)
                     fileIndex.iterateContent { file ->
                         if (!file.isDirectory && file.isValid) {
@@ -311,7 +311,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                         }
                         files.size < 500 // 최대 500개까지만
                     }
-                }
+                }.executeSynchronously()
 
                 // 파일명 매칭 우선, 그 다음 경로 매칭
                 val sorted = if (query.isNotEmpty()) {

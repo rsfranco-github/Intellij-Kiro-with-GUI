@@ -91,10 +91,10 @@ class SettingsPanel(private val project: Project) {
             }
 
             kiroPathField.addBrowseFolderListener(
-                "kiro-cli",
-                KiroMessages["settings.cliPathDesc"],
                 project,
-                FileChooserDescriptorFactory.createSingleFileDescriptor()
+                FileChooserDescriptorFactory.singleFile()
+                    .withTitle("kiro-cli")
+                    .withDescription(KiroMessages["settings.cliPathDesc"])
             )
 
             contentPanel.add(kiroPathField, BorderLayout.CENTER)
@@ -122,10 +122,10 @@ class SettingsPanel(private val project: Project) {
             }
 
             kiroConfigDirField.addBrowseFolderListener(
-                KiroMessages["settings.configDir"],
-                KiroMessages["settings.configDirDesc"],
                 project,
                 FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                    .withTitle(KiroMessages["settings.configDir"])
+                    .withDescription(KiroMessages["settings.configDirDesc"])
             )
             kiroConfigDirField.alignmentX = Component.LEFT_ALIGNMENT
             contentPanel.add(kiroConfigDirField)
