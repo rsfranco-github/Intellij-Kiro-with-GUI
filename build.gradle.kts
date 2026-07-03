@@ -56,6 +56,13 @@ intellijPlatform {
             sinceBuild = "251"
         }
     }
+    pluginVerification {
+        ides {
+            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")
+            // 2026.2 EAP — 이슈 리포트된 PhpStorm 빌드와 동일
+            ide(org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.PhpStorm, "262.8377.43")
+        }
+    }
 }
 
 kotlin {
