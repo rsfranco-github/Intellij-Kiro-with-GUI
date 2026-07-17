@@ -24,6 +24,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.2.4</h3>
+        <ul>
+            <li>Fix: Chat responses now arrive in <b>Remote Development</b> environments &mdash; the response stream (SSE) could not pass the remote forwarding layer, so it was replaced with lightweight polling that works both locally and remotely</li>
+            <li>Responses are no longer lost if the chat view reconnects mid-generation</li>
+        </ul>
+
         <h3>0.2.3</h3>
         <ul>
             <li>Fix: Windows absolute paths (<code>C:\...</code>) are now recognized when setting the kiro-cli path &mdash; no more false "kiro-cli not found" warning and no need for the <code>\</code>-prefix workaround</li>
