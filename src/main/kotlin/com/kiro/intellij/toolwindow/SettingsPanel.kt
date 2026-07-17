@@ -7,7 +7,9 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
+import com.intellij.openapi.application.ApplicationManager
 import com.kiro.intellij.settings.KiroCliResolver
+import com.kiro.intellij.settings.KiroModelProvider
 import com.kiro.intellij.settings.KiroSettings
 import java.awt.*
 import java.io.File
@@ -47,11 +49,8 @@ class SettingsPanel(private val project: Project) {
 
     private val kiroPathField = TextFieldWithBrowseButton()
     private val kiroConfigDirField = TextFieldWithBrowseButton()
-    private val modelComboBox = JComboBox(arrayOf(
-        "Auto", "claude-opus-4.6", "claude-sonnet-4.6", "claude-opus-4.5",
-        "claude-sonnet-4.5", "claude-sonnet-4", "claude-haiku-4.5",
-        "deepseek-3.2", "minimax-m2.1", "minimax-m2.5", "qwen3-coder-next"
-    ))
+    // kiro-cli와 동기화된 모델 목록 (캐시/fallback으로 즉시 채우고, 조회가 끝나면 갱신)
+    private val modelComboBox = JComboBox(KiroModelProvider.getCached().map { it.id }.toTypedArray())
     private val languageComboBox = JComboBox(arrayOf(
         "Korean" to "ko",
         "English" to "en"
@@ -70,6 +69,30 @@ class SettingsPanel(private val project: Project) {
     init {
         setupUI()
         loadSettings()
+        refreshModelList()
+    }
+
+    /** kiro-cli에서 실제 모델 목록을 백그라운드로 조회해 콤보를 갱신 (선택값 유지) */
+    private fun refreshModelList() {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val models = KiroModelProvider.getModelsBlocking()
+            SwingUtilities.invokeLater {
+                val selected = modelComboBox.selectedItem as? String
+                modelComboBox.model = DefaultComboBoxModel(models.map { it.id }.toTypedArray())
+                selectModelItem(selected)
+            }
+        }
+    }
+
+    /** 저장값("Auto" 등 레거시 표기 포함)을 대소문자 무시로 선택 */
+    private fun selectModelItem(value: String?) {
+        if (value == null) return
+        for (i in 0 until modelComboBox.itemCount) {
+            if (modelComboBox.getItemAt(i).equals(value, ignoreCase = true)) {
+                modelComboBox.selectedIndex = i
+                return
+            }
+        }
     }
 
     private fun setupUI() {
@@ -268,7 +291,7 @@ class SettingsPanel(private val project: Project) {
         val state = KiroSettings.getInstance().state
         kiroPathField.text = state.kiroCommand
         kiroConfigDirField.text = state.kiroConfigDir
-        modelComboBox.selectedItem = state.defaultModel
+        selectModelItem(state.defaultModel)
         languageComboBox.selectedItem = reverseLanguageMap[state.language] ?: "English"
         themeComboBox.selectedItem = reverseThemeMap[state.theme] ?: "Auto"
         updateConfigDirLabel(state.kiroConfigDir)

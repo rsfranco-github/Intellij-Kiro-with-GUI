@@ -32,6 +32,7 @@
             <li>Fix: Responses (e.g. to image questions) could be silently dropped when a previous generation had been stopped shortly before &mdash; a late completion signal from the stopped run no longer interferes with the next message</li>
             <li>Stopping a generation no longer leaves a residual partial bubble</li>
             <li>The message input stays editable while a response is generating, so you can pre-type your next message</li>
+            <li>Model lists are now synced with kiro-cli (<code>--list-models</code>) instead of being hardcoded &mdash; fetched once in the background and cached, so nothing gets slower</li>
         </ul>
 
         <h3>0.2.3</h3>

@@ -63,7 +63,8 @@ class KiroCliProcess(private val project: Project) {
                 }
 
                 val effectiveModel = model ?: settings.defaultModel
-                if (effectiveModel != "Auto") {
+                // kiro-cli의 모델 id는 소문자 "auto" — 레거시 저장값 "Auto"도 함께 처리
+                if (!effectiveModel.equals("auto", ignoreCase = true)) {
                     command.addAll(listOf("--model", effectiveModel))
                 }
 

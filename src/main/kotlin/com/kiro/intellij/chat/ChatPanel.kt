@@ -452,7 +452,7 @@ let openFiles = [];
 let excludedPaths = new Set();
 let attachedImages = [];
 let acSelectedIndex = -1;
-let currentModel = 'Auto';
+let currentModel = 'auto';
 let projectFiles = [];
 let agents = [];
 let i18n = { placeholder: '', openFile: '', systemLog: '' };
@@ -482,18 +482,17 @@ function shouldSkipLine(line) {
 }
 
 // --- model selector (opens upward) ---
-const MODELS = [
+// 초기값은 내장 fallback — /api/models 응답(kiro-cli와 동기화, 서버에서 캐싱)이 오면 교체
+let MODELS = [
     { value: 'auto', label: 'Auto' },
-    { value: 'claude-opus-4.6', label: 'Claude Opus 4.6' },
-    { value: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
-    { value: 'claude-opus-4.5', label: 'Claude Opus 4.5' },
     { value: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
     { value: 'claude-sonnet-4', label: 'Claude Sonnet 4' },
     { value: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
     { value: 'deepseek-3.2', label: 'DeepSeek 3.2' },
-    { value: 'minimax-m2.1', label: 'MiniMax M2.1' },
     { value: 'minimax-m2.5', label: 'MiniMax M2.5' },
-    { value: 'qwen3-coder-next', label: 'Qwen3 Coder' },
+    { value: 'minimax-m2.1', label: 'MiniMax M2.1' },
+    { value: 'glm-5', label: 'GLM 5' },
+    { value: 'qwen3-coder-next', label: 'Qwen3 Coder Next' },
 ];
 function renderModelMenu() {
     modelMenu.innerHTML = '';
@@ -501,6 +500,7 @@ function renderModelMenu() {
         const item = document.createElement('div');
         item.className = 'm-item' + (m.value === currentModel ? ' active' : '');
         item.textContent = m.label;
+        if (m.description) item.title = m.description;
         item.onclick = (e) => {
             e.stopPropagation();
             currentModel = m.value;
@@ -513,6 +513,14 @@ function renderModelMenu() {
     });
 }
 renderModelMenu();
+fetch(API + '/api/models').then(r => r.json()).then(list => {
+    if (Array.isArray(list) && list.length > 0) {
+        MODELS = list;
+        renderModelMenu();
+        const cur = MODELS.find(m => m.value === currentModel);
+        if (cur) modelBtn.textContent = cur.label + ' ▾';
+    }
+}).catch(() => {});
 modelBtn.onclick = (e) => {
     e.stopPropagation();
     modelMenu.style.display = modelMenu.style.display === 'block' ? 'none' : 'block';

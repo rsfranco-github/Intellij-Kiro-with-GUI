@@ -9,7 +9,6 @@ import javax.swing.JComponent
 class KiroSettingsConfigurable : Configurable {
 
     private var commandField: TextFieldWithBrowseButton? = null
-    private val models = arrayOf("Auto", "claude-opus-4.6", "claude-opus-4.5", "claude-sonnet-4.5", "claude-sonnet-4.0", "claude-haiku-4.5")
     private var modelCombo: javax.swing.JComboBox<String>? = null
 
     override fun getDisplayName(): String = "Kiro"
@@ -22,13 +21,32 @@ class KiroSettingsConfigurable : Configurable {
                 FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
                     .withDescription("Path to kiro-cli executable"))
         }
-        modelCombo = javax.swing.JComboBox(models).apply {
-            selectedItem = settings.defaultModel
+        // kiro-cli와 동기화된 모델 목록 (캐시/fallback으로 즉시 채우고, 조회가 끝나면 갱신)
+        modelCombo = javax.swing.JComboBox(KiroModelProvider.getCached().map { it.id }.toTypedArray()).apply {
+            selectItemIgnoreCase(this, settings.defaultModel)
+        }
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            val models = KiroModelProvider.getModelsBlocking()
+            javax.swing.SwingUtilities.invokeLater {
+                val combo = modelCombo ?: return@invokeLater
+                val selected = combo.selectedItem as? String
+                combo.model = javax.swing.DefaultComboBoxModel(models.map { it.id }.toTypedArray())
+                selectItemIgnoreCase(combo, selected ?: settings.defaultModel)
+            }
         }
 
         return panel {
             row("Kiro command:") { cell(commandField!!) }
             row("Default model:") { cell(modelCombo!!) }
+        }
+    }
+
+    private fun selectItemIgnoreCase(combo: javax.swing.JComboBox<String>, value: String) {
+        for (i in 0 until combo.itemCount) {
+            if (combo.getItemAt(i).equals(value, ignoreCase = true)) {
+                combo.selectedIndex = i
+                return
+            }
         }
     }
 
@@ -49,7 +67,7 @@ class KiroSettingsConfigurable : Configurable {
     override fun reset() {
         val settings = KiroSettings.getInstance().state
         commandField?.text = settings.kiroCommand
-        modelCombo?.selectedItem = settings.defaultModel
+        modelCombo?.let { selectItemIgnoreCase(it, settings.defaultModel) }
     }
 
     override fun disposeUIResources() {

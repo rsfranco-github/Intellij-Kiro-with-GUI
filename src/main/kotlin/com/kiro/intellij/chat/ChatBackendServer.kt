@@ -43,6 +43,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         server.createContext("/api/open-files") { exchange -> handleOpenFiles(exchange) }
         server.createContext("/api/save-image") { exchange -> handleSaveImage(exchange) }
         server.createContext("/api/set-model") { exchange -> handleSetModel(exchange) }
+        server.createContext("/api/models") { exchange -> handleModels(exchange) }
         server.createContext("/api/health") { exchange -> handleHealth(exchange) }
         server.createContext("/api/project-files") { exchange -> handleProjectFiles(exchange) }
         server.createContext("/api/agents") { exchange -> handleAgents(exchange) }
@@ -51,6 +52,9 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
 
         server.start()
         log.info("Chat backend server started on port $port")
+
+        // 모델 목록 미리 조회 (~2초 소요) — UI가 요청할 때쯤 캐시가 준비되도록
+        com.kiro.intellij.settings.KiroModelProvider.warmUp()
     }
 
     fun registerSession(sessionId: String, session: ChatSession) {
@@ -147,6 +151,22 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
             log.warn("handleStop error", e)
             sendResponse(exchange, 500, e.message ?: "Internal server error")
         }
+    }
+
+    /**
+     * 사용 가능한 모델 목록 반환 (kiro-cli와 동기화, 캐시됨).
+     * 이 핸들러는 서버 풀 스레드에서 실행되므로 첫 호출이 CLI 조회를 기다려도 UI를 막지 않는다.
+     */
+    private fun handleModels(exchange: HttpExchange) {
+        setCorsHeaders(exchange)
+        if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
+
+        val models = com.kiro.intellij.settings.KiroModelProvider.getModelsBlocking()
+        val json = models.joinToString(",") { m ->
+            "{\"value\":\"${escapeJson(m.id)}\",\"label\":\"${escapeJson(m.label)}\",\"description\":\"${escapeJson(m.description)}\"}"
+        }
+        exchange.responseHeaders.set("Content-Type", "application/json")
+        sendResponse(exchange, 200, "[$json]")
     }
 
     private fun handleSetModel(exchange: HttpExchange) {
