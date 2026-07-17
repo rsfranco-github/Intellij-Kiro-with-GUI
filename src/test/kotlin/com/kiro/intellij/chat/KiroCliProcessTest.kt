@@ -6,6 +6,88 @@ import org.junit.jupiter.api.Assertions.*
 class KiroCliProcessTest {
 
     @Test
+    fun `spinner frames separated by carriage return are emitted once`() {
+        val chunks = mutableListOf<String>()
+        val emitter = OutputEmitter { chunks.add(it) }
+
+        // 로그아웃 상태에서 kiro-cli가 뿜는 로그인 스피너: \r로 같은 줄을 덮어쓰는 프레임들
+        emitter.feed("⡆ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("⡇ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("⡏ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("▰▰▱▱▱▱▱ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("▰▰▰▱▱▱▱ Opening browser... | Press (^) + C to cancel\r")
+        emitter.finish()
+
+        assertEquals(1, chunks.size, "same spinner message should be emitted only once: $chunks")
+        assertTrue(chunks[0].startsWith("[SYS]"))
+        assertTrue(chunks[0].contains("Opening browser"))
+    }
+
+    @Test
+    fun `different system messages are not deduplicated`() {
+        val chunks = mutableListOf<String>()
+        val emitter = OutputEmitter { chunks.add(it) }
+
+        emitter.feed("⡆ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("⡆ Loading something else entirely\r")
+        emitter.finish()
+
+        assertEquals(2, chunks.size)
+    }
+
+    @Test
+    fun `normal newline lines pass through unchanged`() {
+        val chunks = mutableListOf<String>()
+        val emitter = OutputEmitter { chunks.add(it) }
+
+        emitter.feed("hello world\n")
+        emitter.feed("second line\n")
+        emitter.finish()
+
+        assertEquals(listOf("hello world\n", "second line\n"), chunks)
+        assertTrue(emitter.hasOutput)
+    }
+
+    @Test
+    fun `crlf is treated as a normal newline not a spinner frame`() {
+        val chunks = mutableListOf<String>()
+        val emitter = OutputEmitter { chunks.add(it) }
+
+        emitter.feed("windows line\r\n")
+        emitter.finish()
+
+        assertEquals(1, chunks.size)
+        assertFalse(chunks[0].startsWith("[SYS]"), "CRLF line must not be classified as spinner output: ${chunks[0]}")
+    }
+
+    @Test
+    fun `content after final spinner frame is emitted as normal chunk`() {
+        val chunks = mutableListOf<String>()
+        val emitter = OutputEmitter { chunks.add(it) }
+
+        emitter.feed("⡆ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("⡇ Opening browser... | Press (^) + C to cancel\r")
+        emitter.feed("✓ Signed in with Google\n")
+        emitter.feed("actual answer\n")
+        emitter.finish()
+
+        assertTrue(chunks.any { it.contains("Signed in with Google") })
+        assertTrue(chunks.any { it == "actual answer\n" })
+    }
+
+    @Test
+    fun `normalizeSystemLine equates spinner frames`() {
+        val a = KiroCliProcess.normalizeSystemLine("⡆ Opening browser... | Press (^) + C to cancel")
+        val b = KiroCliProcess.normalizeSystemLine("⡏ Opening browser... | Press (^) + C to cancel")
+        val c = KiroCliProcess.normalizeSystemLine("▰▰▰▱▱▱▱ Opening browser... | Press (^) + C to cancel")
+        assertEquals(a, b)
+        assertEquals(a, c)
+
+        val other = KiroCliProcess.normalizeSystemLine("⡆ Loading tools...")
+        assertTrue(a != other)
+    }
+
+    @Test
     fun `stripAnsi should remove ANSI escape codes`() {
         assertEquals("hello", KiroCliProcess.stripAnsi("\u001B[32mhello\u001B[0m"))
         assertEquals("hello world", KiroCliProcess.stripAnsi("\u001B[1;34mhello\u001B[0m \u001B[31mworld\u001B[0m"))

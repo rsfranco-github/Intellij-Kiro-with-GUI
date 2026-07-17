@@ -75,51 +75,15 @@ class KiroCliProcess(private val project: Project) {
                 currentProcess = process
 
                 val inputStream = process.inputStream
-                var hasOutput = false
-                val lineBuffer = StringBuilder()
+                val emitter = OutputEmitter(onChunk)
 
                 val buf = ByteArray(1024)
                 var bytesRead: Int
                 while (inputStream.read(buf).also { bytesRead = it } != -1) {
-                    val text = String(buf, 0, bytesRead, Charsets.UTF_8)
-                    for (c in text) {
-                        lineBuffer.append(c)
-                        if (c == '\n') {
-                            val raw = lineBuffer.toString()
-                            val clean = stripAnsi(raw)
-                            if (clean.isNotBlank()) {
-                                // ANSI 원본 기반으로 시스템 로그 판별
-                                if (isSystemOutput(raw)) {
-                                    onChunk("[SYS]" + clean)
-                                } else {
-                                    onChunk(clean)
-                                }
-                                hasOutput = true
-                            }
-                            lineBuffer.clear()
-                        }
-                    }
-                    if (lineBuffer.length > 200) {
-                        val raw = lineBuffer.toString()
-                        val clean = stripAnsi(raw)
-                        if (clean.isNotBlank()) {
-                            if (isSystemOutput(raw)) {
-                                onChunk("[SYS]" + clean)
-                            } else {
-                                onChunk(clean)
-                            }
-                            hasOutput = true
-                        }
-                        lineBuffer.clear()
-                    }
+                    emitter.feed(String(buf, 0, bytesRead, Charsets.UTF_8))
                 }
-                if (lineBuffer.isNotEmpty()) {
-                    val clean = stripAnsi(lineBuffer.toString())
-                    if (clean.isNotBlank()) {
-                        onChunk(clean)
-                        hasOutput = true
-                    }
-                }
+                emitter.finish()
+                val hasOutput = emitter.hasOutput
 
                 val completed = process.waitFor(300, TimeUnit.SECONDS)
 
@@ -243,6 +207,12 @@ class KiroCliProcess(private val project: Project) {
                 }
         }
 
+        // 스피너/진행 표시 문자 (braille ⣾⣽…, 블록 ▰▱, 회전 문자)와 공백 — 프레임 비교용
+        private val SPINNER_GLYPHS = Regex("[\\u2800-\\u28FF▰▱◐◓◑◒]|\\s+")
+
+        /** 스피너 문자와 공백을 제거한 비교용 문자열. 애니메이션 프레임끼리는 같은 값이 된다. */
+        fun normalizeSystemLine(s: String): String = SPINNER_GLYPHS.replace(s, "")
+
         /**
          * ANSI 원본 기반으로 시스템 로그 판별.
          * kiro-cli 출력 패턴:
@@ -328,5 +298,78 @@ class KiroCliProcess(private val project: Project) {
                     "Unexpected error: $message"
             }
         }
+    }
+}
+
+/**
+ * kiro-cli 출력 스트림을 줄/스피너 프레임 단위로 분리해 콜백으로 전달.
+ * - '\n': 일반 줄 경계
+ * - '\r' 단독: 스피너 애니메이션의 프레임 경계 (같은 줄 덮어쓰기)
+ * - '\r\n': 일반 개행 (Windows)
+ * 연속된 시스템 메시지가 스피너 문자만 다르면 한 번만 전달한다
+ * (로그아웃 상태의 "Opening browser..." 스피너가 프레임마다 쌓이는 문제 방지).
+ */
+internal class OutputEmitter(private val onChunk: (String) -> Unit) {
+
+    var hasOutput = false
+        private set
+
+    private val lineBuffer = StringBuilder()
+    private var crPending = false
+    private var lastSysNormalized: String? = null
+
+    fun feed(text: String) {
+        for (c in text) {
+            if (crPending) {
+                crPending = false
+                if (c != '\n') {
+                    // '\r' 단독 → 지금까지의 버퍼가 하나의 스피너 프레임
+                    emit(lineBuffer.toString() + "\r")
+                    lineBuffer.clear()
+                }
+                // '\r\n'이면 일반 개행으로 아래에서 처리
+            }
+            if (c == '\r') {
+                crPending = true
+                continue
+            }
+            lineBuffer.append(c)
+            if (c == '\n') {
+                emit(lineBuffer.toString())
+                lineBuffer.clear()
+            }
+        }
+        if (lineBuffer.length > 200) {
+            emit(lineBuffer.toString())
+            lineBuffer.clear()
+        }
+    }
+
+    fun finish() {
+        if (crPending) {
+            crPending = false
+            emit(lineBuffer.toString() + "\r")
+            lineBuffer.clear()
+        }
+        if (lineBuffer.isNotEmpty()) {
+            emit(lineBuffer.toString())
+            lineBuffer.clear()
+        }
+    }
+
+    private fun emit(raw: String) {
+        val clean = KiroCliProcess.stripAnsi(raw)
+        if (clean.isBlank()) return
+
+        if (KiroCliProcess.isSystemOutput(raw)) {
+            val normalized = KiroCliProcess.normalizeSystemLine(clean)
+            if (normalized == lastSysNormalized) return // 같은 내용의 스피너 프레임 반복 억제
+            lastSysNormalized = normalized
+            onChunk("[SYS]" + clean)
+        } else {
+            lastSysNormalized = null
+            onChunk(clean)
+        }
+        hasOutput = true
     }
 }
