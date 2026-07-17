@@ -303,7 +303,6 @@ body {
     color: var(--placeholder-fg);
     pointer-events: none;
 }
-#input.disabled { opacity: 0.4; pointer-events: none; }
 /* inline badge styles */
 .inline-badge {
     display: inline-flex; align-items: center; gap: 2px;
@@ -900,9 +899,8 @@ function addErrorMessage(text) {
 
 function setEnabled(en) {
     isStreaming = !en;
-    if (!en) input.classList.add('disabled');
-    else input.classList.remove('disabled');
-    input.contentEditable = en ? 'true' : 'false';
+    // 생성 중에도 입력창은 편집 가능하게 유지 — 다음 메시지를 미리 입력해두고
+    // 생성 완료 직후 바로 Enter로 보낼 수 있다 (생성 중 Enter는 sendMessage의 isStreaming 가드가 막음)
 
     // toggle send/stop button
     if (en) {
