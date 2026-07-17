@@ -27,10 +27,7 @@
         <h3>0.2.4</h3>
         <ul>
             <li>Fix: Chat responses now arrive in <b>Remote Development</b> environments &mdash; the response stream (SSE) could not pass the remote forwarding layer, so it was replaced with lightweight polling that works both locally and remotely</li>
-            <li>Responses are no longer lost if the chat view reconnects mid-generation</li>
             <li>Fix: Spinner animations (e.g. the "Opening browser..." login prompt when signed out) no longer flood the system log &mdash; repeated frames are collapsed into a single line</li>
-            <li>Fix: Responses (e.g. to image questions) could be silently dropped when a previous generation had been stopped shortly before &mdash; a late completion signal from the stopped run no longer interferes with the next message</li>
-            <li>Stopping a generation no longer leaves a residual partial bubble</li>
             <li>The message input stays editable while a response is generating, so you can pre-type your next message</li>
             <li>Model lists are now synced with kiro-cli (<code>--list-models</code>) instead of being hardcoded &mdash; fetched once in the background and cached, so nothing gets slower</li>
         </ul>
