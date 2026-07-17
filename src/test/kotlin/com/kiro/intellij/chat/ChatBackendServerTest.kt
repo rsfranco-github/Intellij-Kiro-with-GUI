@@ -1,10 +1,43 @@
 package com.kiro.intellij.chat
 
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import java.io.File
+import java.net.URI
 
 class ChatBackendServerTest {
+
+    @Test
+    fun `api events returns buffered events after cursor`() {
+        val parent = Disposer.newDisposable()
+        try {
+            val server = ChatBackendServer(mockk<Project>(relaxed = true), parent)
+            val session = ChatSession("evt-test", mockk<Project>(relaxed = true))
+            server.registerSession("evt-test", session)
+
+            // 이벤트 2개 적재 (stopGeneration은 done 이벤트를 쌓는다)
+            session.stopGeneration()
+            session.stopGeneration()
+
+            val all = URI("http://127.0.0.1:${server.port}/api/events?session=evt-test&after=0")
+                .toURL().readText()
+            assertEquals("""[{"seq":1,"event":"done","data":""},{"seq":2,"event":"done","data":""}]""", all)
+
+            val afterFirst = URI("http://127.0.0.1:${server.port}/api/events?session=evt-test&after=1")
+                .toURL().readText()
+            assertEquals("""[{"seq":2,"event":"done","data":""}]""", afterFirst)
+
+            val upToDate = URI("http://127.0.0.1:${server.port}/api/events?session=evt-test&after=2")
+                .toURL().readText()
+            assertEquals("[]", upToDate)
+        } finally {
+            Disposer.dispose(parent)
+        }
+    }
 
     @Test
     fun `json escape should handle special characters`() {

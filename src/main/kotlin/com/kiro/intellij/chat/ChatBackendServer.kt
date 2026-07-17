@@ -33,12 +33,11 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     init {
         Disposer.register(parentDisposable, this)
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        // SSE 연결(/api/stream)이 스레드를 점유하므로 고정 풀 사용 시 고갈됨 → cached pool
         server.executor = Executors.newCachedThreadPool()
         port = server.address.port
 
         server.createContext("/api/send") { exchange -> handleSend(exchange) }
-        server.createContext("/api/stream") { exchange -> handleStream(exchange) }
+        server.createContext("/api/events") { exchange -> handleEvents(exchange) }
         server.createContext("/api/stop") { exchange -> handleStop(exchange) }
         server.createContext("/api/new-session") { exchange -> handleNewSession(exchange) }
         server.createContext("/api/open-files") { exchange -> handleOpenFiles(exchange) }
@@ -101,48 +100,29 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     }
 
     /**
-     * SSE endpoint. webview가 연결하면 응답을 실시간 스트리밍.
+     * 이벤트 폴링 endpoint. 커서(after) 이후에 쌓인 세션 이벤트를 JSON 배열로 반환.
+     * SSE와 달리 매 요청이 즉시 종료되므로 Remote Development의 포워딩 계층도 통과한다.
      */
-    private fun handleStream(exchange: HttpExchange) {
+    private fun handleEvents(exchange: HttpExchange) {
         setCorsHeaders(exchange)
         if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
 
-        val sessionId = exchange.requestURI.query?.substringAfter("session=")?.substringBefore("&") ?: ""
+        val query = exchange.requestURI.query ?: ""
+        val sessionId = query.substringAfter("session=").substringBefore("&")
+        val after = query.split("&").find { it.startsWith("after=") }
+            ?.substringAfter("=")?.toLongOrNull() ?: 0L
+
         val session = sessions[sessionId]
         if (session == null) {
             sendResponse(exchange, 404, "Session not found")
             return
         }
 
-        exchange.responseHeaders.set("Content-Type", "text/event-stream")
-        exchange.responseHeaders.set("Cache-Control", "no-cache")
-        exchange.responseHeaders.set("Connection", "keep-alive")
-        exchange.sendResponseHeaders(200, 0)
-
-        val out = exchange.responseBody
-        val writer: (String, String) -> Unit = { event, data ->
-            try {
-                val escaped = data.replace("\n", "\ndata: ")
-                out.write("event: $event\ndata: $escaped\n\n".toByteArray())
-                out.flush()
-            } catch (_: Exception) {
-                // 연결 끊김
-            }
+        val json = session.eventsAfter(after).joinToString(",") { e ->
+            "{\"seq\":${e.seq},\"event\":\"${escapeJson(e.event)}\",\"data\":\"${escapeJson(e.data)}\"}"
         }
-        session.setStreamWriter(writer)
-
-        // 연결 유지 (webview가 끊을 때까지, ping 실패 시 종료)
-        try {
-            while (!Thread.currentThread().isInterrupted) {
-                Thread.sleep(30000)
-                out.write("event: ping\ndata: \n\n".toByteArray())
-                out.flush()
-            }
-        } catch (_: Exception) {
-        } finally {
-            session.clearStreamWriter(writer)
-            try { out.close() } catch (_: Exception) {}
-        }
+        exchange.responseHeaders.set("Content-Type", "application/json")
+        sendResponse(exchange, 200, "[$json]")
     }
 
     private fun handleNewSession(exchange: HttpExchange) {
@@ -219,7 +199,8 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     }
 
     private fun escapeJson(s: String): String {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+            .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
     }
 
     private fun handleSaveImage(exchange: HttpExchange) {

@@ -616,6 +616,7 @@ function sendMessage() {
     setEnabled(false);
     fetch(API + '/api/send', { method: 'POST', body: SESSION + '\n' + fullMessage })
         .catch(err => { addErrorMessage('Send failed: ' + err.message); setEnabled(true); });
+    schedulePoll(); // isStreaming=true 상태이므로 150ms 폴링으로 즉시 전환
 }
 
 function addUserMessage(text) {
@@ -1262,15 +1263,41 @@ function renderImagePreviews() {
     });
 }
 
-// --- SSE ---
-function connectSSE() {
-    const es = new EventSource(API + '/api/stream?session=' + SESSION);
-    es.addEventListener('start', () => startAssistantMessage());
-    es.addEventListener('chunk', (e) => appendChunk(e.data));
-    es.addEventListener('done', () => finishAssistantMessage());
-    es.addEventListener('error', (e) => { if (e.data) addErrorMessage(e.data); finishAssistantMessage(); });
-    es.addEventListener('ping', () => {});
-    es.onerror = () => setTimeout(connectSSE, 2000);
+// --- event polling ---
+// Remote Development에서는 SSE(끝나지 않는 응답)가 포워딩 계층을 통과하지 못하므로
+// 커서 기반 폴링으로 이벤트를 가져온다 (생성 중 150ms, 대기 중 2s)
+let eventCursor = 0;
+let pollTimer = null;
+
+function handleEvent(ev) {
+    // 응답 대기 중이 아니면 렌더링하지 않음 (중지 후 도착하는 잔여 chunk/중복 done 무시)
+    if (!isStreaming) return;
+    if (ev.event === 'start') startAssistantMessage();
+    else if (ev.event === 'chunk') appendChunk(ev.data);
+    else if (ev.event === 'done') finishAssistantMessage();
+    else if (ev.event === 'error') { if (ev.data) addErrorMessage(ev.data); finishAssistantMessage(); }
+}
+
+function pollEvents() {
+    fetch(API + '/api/events?session=' + SESSION + '&after=' + eventCursor)
+        .then(r => r.json())
+        .then(evs => { for (const ev of evs) { eventCursor = ev.seq; handleEvent(ev); } })
+        .catch(() => {})
+        .finally(schedulePoll);
+}
+
+function schedulePoll() {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(pollEvents, isStreaming ? 150 : 2000);
+}
+
+// 페이지 최초 로드: 과거 이벤트는 렌더링하지 않고 커서만 최신으로 맞춘 뒤 폴링 시작
+function initEventPolling() {
+    fetch(API + '/api/events?session=' + SESSION + '&after=0')
+        .then(r => r.json())
+        .then(evs => { for (const ev of evs) eventCursor = ev.seq; })
+        .catch(() => {})
+        .finally(schedulePoll);
 }
 
 // marked.js config (GFM table, line breaks)
@@ -1302,7 +1329,7 @@ function refreshOpenFiles() {
 }
 
 refreshOpenFiles(); setInterval(refreshOpenFiles, 3000);
-connectSSE(); input.focus();
+initEventPolling(); input.focus();
 </script>
 </body>
 </html>

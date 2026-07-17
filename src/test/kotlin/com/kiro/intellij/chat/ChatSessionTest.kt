@@ -9,23 +9,32 @@ import org.junit.jupiter.api.BeforeEach
 class ChatSessionTest {
 
     @Test
-    fun `clearStreamWriter should only clear when the same writer is registered`() {
+    fun `events are buffered with increasing seq and fetched by cursor`() {
         val session = ChatSession("test-session", mockk<Project>(relaxed = true))
-        val received = mutableListOf<String>()
-        val writerA: (String, String) -> Unit = { event, _ -> received.add("A:$event") }
-        val writerB: (String, String) -> Unit = { event, _ -> received.add("B:$event") }
 
-        // SSE 재연결 시나리오: A 등록 → B로 교체 → 늦게 실행된 A의 정리 코드가 B를 지우면 안 됨
-        session.setStreamWriter(writerA)
-        session.setStreamWriter(writerB)
-        session.clearStreamWriter(writerA)
+        // stopGeneration은 done 이벤트를 적재한다 (프로세스가 없으면 stop은 no-op)
         session.stopGeneration()
-        assertEquals(listOf("B:done"), received)
+        session.stopGeneration()
 
-        // 등록된 writer 자신을 해제하면 이후 이벤트가 전달되지 않음
-        session.clearStreamWriter(writerB)
-        session.stopGeneration()
-        assertEquals(listOf("B:done"), received)
+        val all = session.eventsAfter(0)
+        assertEquals(2, all.size)
+        assertEquals(listOf(1L, 2L), all.map { it.seq })
+        assertTrue(all.all { it.event == "done" })
+
+        // 커서 이후의 이벤트만 반환
+        val afterFirst = session.eventsAfter(1)
+        assertEquals(listOf(2L), afterFirst.map { it.seq })
+
+        // 커서가 최신이면 빈 목록
+        assertTrue(session.eventsAfter(2).isEmpty())
+    }
+
+    @Test
+    fun `event buffer keeps seq monotonic across many events`() {
+        val session = ChatSession("test-session", mockk<Project>(relaxed = true))
+        repeat(10) { session.stopGeneration() }
+        val events = session.eventsAfter(0)
+        assertEquals((1L..10L).toList(), events.map { it.seq })
     }
 
     @Test

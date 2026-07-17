@@ -3,53 +3,64 @@ package com.kiro.intellij.chat
 import com.intellij.openapi.project.Project
 
 /**
- * 하나의 채팅 세션. KiroCliProcess를 관리하고 SSE로 응답 스트리밍.
+ * 하나의 채팅 세션. KiroCliProcess를 관리하고 응답을 이벤트 버퍼에 적재한다.
+ * webview는 /api/events 폴링으로 커서(seq) 이후의 이벤트를 가져간다.
+ * (SSE는 Remote Development의 포워딩 계층을 통과하지 못해 폴링으로 대체)
  */
 class ChatSession(
     val id: String,
     private val project: Project
 ) {
+    data class SessionEvent(val seq: Long, val event: String, val data: String)
+
     private val cliProcess = KiroCliProcess(project)
-    private var streamWriter: ((event: String, data: String) -> Unit)? = null
+    private val events = ArrayDeque<SessionEvent>()
+    private var nextSeq = 1L
+    private val lock = Any()
 
     var model: String?
         get() = cliProcess.model
         set(value) { cliProcess.model = value }
 
-    fun setStreamWriter(writer: ((event: String, data: String) -> Unit)?) {
-        this.streamWriter = writer
-    }
-
-    /** 해당 writer가 현재 등록된 writer일 때만 해제 (재연결로 등록된 새 writer 보호) */
-    fun clearStreamWriter(writer: (event: String, data: String) -> Unit) {
-        if (this.streamWriter === writer) {
-            this.streamWriter = null
+    private fun appendEvent(event: String, data: String) {
+        synchronized(lock) {
+            events.addLast(SessionEvent(nextSeq++, event, data))
+            while (events.size > MAX_EVENTS) events.removeFirst()
         }
     }
 
+    /** seq보다 큰 이벤트를 순서대로 반환 */
+    fun eventsAfter(seq: Long): List<SessionEvent> = synchronized(lock) {
+        events.filter { it.seq > seq }
+    }
+
     fun sendMessage(message: String) {
-        streamWriter?.invoke("start", "")
+        appendEvent("start", "")
 
         cliProcess.sendMessage(
             message = message,
             onChunk = { chunk ->
-                streamWriter?.invoke("chunk", chunk)
+                appendEvent("chunk", chunk)
             },
             onDone = {
-                streamWriter?.invoke("done", "")
+                appendEvent("done", "")
             },
             onError = { error ->
-                streamWriter?.invoke("error", error)
+                appendEvent("error", error)
             }
         )
     }
 
     fun stopGeneration() {
         cliProcess.stop()
-        streamWriter?.invoke("done", "")
+        appendEvent("done", "")
     }
 
     fun resetSession() {
         cliProcess.resetSession()
+    }
+
+    companion object {
+        private const val MAX_EVENTS = 5000
     }
 }
