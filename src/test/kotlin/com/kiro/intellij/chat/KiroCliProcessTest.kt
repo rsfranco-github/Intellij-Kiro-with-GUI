@@ -1,9 +1,100 @@
 package com.kiro.intellij.chat
 
+import com.intellij.openapi.project.Project
+import com.kiro.intellij.settings.KiroSettings
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArrayList
 
 class KiroCliProcessTest {
+
+    private fun mockCliWith(script: File) {
+        mockkObject(KiroSettings.Companion)
+        val settingsMock = mockk<KiroSettings>()
+        every { settingsMock.state } returns KiroSettings.State(kiroCommand = script.absolutePath)
+        every { KiroSettings.getInstance() } returns settingsMock
+
+        mockkObject(KiroCliValidator)
+        every { KiroCliValidator.validate(any()) } returns KiroCliValidator.ValidationResult(
+            cliFound = true, cliPath = script.absolutePath,
+            version = "test", authenticated = true, errorMessage = null
+        )
+    }
+
+    @Test
+    fun `stopped run does not emit late done or chunks`(@TempDir tempDir: Path) {
+        val script = File(tempDir.toFile(), "fake-kiro").apply {
+            writeText("#!/bin/sh\necho first line\nsleep 5\necho late line\n")
+            setExecutable(true)
+        }
+        mockCliWith(script)
+
+        try {
+            val events = CopyOnWriteArrayList<String>()
+            val project = mockk<Project>(relaxed = true)
+            every { project.basePath } returns tempDir.toString()
+            val proc = KiroCliProcess(project)
+            proc.sendMessage(
+                "hello",
+                onChunk = { events.add("chunk:${it.trim()}") },
+                onDone = { events.add("done") },
+                onError = { events.add("error:$it") }
+            )
+
+            // 첫 출력 도착 대기
+            val deadline = System.currentTimeMillis() + 5000
+            while (events.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            assertTrue(events.isNotEmpty(), "first chunk should arrive")
+
+            // 중지: 이후 읽기 스레드의 finally가 늦게 실행되어도 done/chunk가 새면 안 됨
+            proc.stop()
+            val sizeAtStop = events.size
+            Thread.sleep(2000)
+
+            assertEquals(sizeAtStop, events.size, "stopped run must not emit late events: $events")
+            assertTrue(events.none { it == "done" }, "late done must be suppressed: $events")
+        } finally {
+            unmockkAll()
+        }
+    }
+
+    @Test
+    fun `normal run emits chunks and a single done`(@TempDir tempDir: Path) {
+        val script = File(tempDir.toFile(), "fake-kiro").apply {
+            writeText("#!/bin/sh\necho the answer\n")
+            setExecutable(true)
+        }
+        mockCliWith(script)
+
+        try {
+            val events = CopyOnWriteArrayList<String>()
+            val project = mockk<Project>(relaxed = true)
+            every { project.basePath } returns tempDir.toString()
+            val proc = KiroCliProcess(project)
+            proc.sendMessage(
+                "hello",
+                onChunk = { events.add("chunk:${it.trim()}") },
+                onDone = { events.add("done") },
+                onError = { events.add("error:$it") }
+            )
+
+            val deadline = System.currentTimeMillis() + 10000
+            while (!events.contains("done") && System.currentTimeMillis() < deadline) Thread.sleep(50)
+
+            assertTrue(events.contains("chunk:the answer"), "answer chunk should arrive: $events")
+            assertEquals(1, events.count { it == "done" }, "exactly one done: $events")
+            assertTrue(events.none { it.startsWith("error") }, "no errors expected: $events")
+        } finally {
+            unmockkAll()
+        }
+    }
 
     @Test
     fun `spinner frames separated by carriage return are emitted once`() {

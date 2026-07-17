@@ -21,6 +21,9 @@ class KiroCliProcess(private val project: Project) {
     private val isBusy = AtomicBoolean(false)
     private val consecutiveErrors = AtomicInteger(0)
     private var currentProcess: Process? = null
+    // 실행 세대. stop()이나 새 실행 시작 시 증가하며, 낡은 실행의 늦은 콜백(done/chunk/error)이
+    // 다음 메시지의 이벤트 스트림에 끼어드는 것을 막는다.
+    private val runGeneration = AtomicInteger(0)
     var model: String? = null
 
     fun sendMessage(message: String, onChunk: (String) -> Unit, onDone: () -> Unit, onError: (String) -> Unit) {
@@ -38,12 +41,16 @@ class KiroCliProcess(private val project: Project) {
             }
         }
 
+        val gen = runGeneration.incrementAndGet()
+        // 이 실행이 최신 세대일 때만 콜백 전달
+        val guardedChunk: (String) -> Unit = { if (runGeneration.get() == gen) onChunk(it) }
+        val guardedError: (String) -> Unit = { if (runGeneration.get() == gen) onError(it) }
+
         Thread({
             try {
                 val validation = KiroCliValidator.validate()
                 if (!validation.cliFound) {
-                    onError(validation.errorMessage ?: "kiro-cli not found.")
-                    onDone()
+                    guardedError(validation.errorMessage ?: "kiro-cli not found.")
                     return@Thread
                 }
 
@@ -75,7 +82,7 @@ class KiroCliProcess(private val project: Project) {
                 currentProcess = process
 
                 val inputStream = process.inputStream
-                val emitter = OutputEmitter(onChunk)
+                val emitter = OutputEmitter(guardedChunk)
 
                 val buf = ByteArray(1024)
                 var bytesRead: Int
@@ -89,7 +96,7 @@ class KiroCliProcess(private val project: Project) {
 
                 if (!completed) {
                     process.destroyForcibly()
-                    onError("kiro-cli response timed out (5 min). Process terminated.")
+                    guardedError("kiro-cli response timed out (5 min). Process terminated.")
                     consecutiveErrors.incrementAndGet()
                 } else {
                     val exitCode = process.exitValue()
@@ -97,7 +104,7 @@ class KiroCliProcess(private val project: Project) {
 
                     if (exitCode != 0 && exitCode != 130 && exitCode != 143) {
                         val errorMsg = classifyExitCode(exitCode, hasOutput)
-                        onError(errorMsg)
+                        guardedError(errorMsg)
                         consecutiveErrors.incrementAndGet()
                     } else {
                         consecutiveErrors.set(0)
@@ -106,18 +113,21 @@ class KiroCliProcess(private val project: Project) {
             } catch (e: Exception) {
                 log.warn("kiro-cli execution failed", e)
                 val userMessage = classifyException(e)
-                onError(userMessage)
+                guardedError(userMessage)
                 consecutiveErrors.incrementAndGet()
                 KiroCliValidator.invalidateCache()
             } finally {
                 currentProcess = null
                 isBusy.set(false)
-                onDone()
+                // 중지되었거나 새 실행으로 대체된 경우 늦은 done을 보내지 않는다
+                if (runGeneration.get() == gen) onDone()
             }
         }, "kiro-cli-send").apply { isDaemon = true }.start()
     }
 
     fun stop() {
+        // 진행 중이던 실행의 이후 콜백을 무효화 (읽기 스레드의 finally가 늦게 실행되어도 done이 새지 않음)
+        runGeneration.incrementAndGet()
         currentProcess?.let { process ->
             try {
                 process.destroy()

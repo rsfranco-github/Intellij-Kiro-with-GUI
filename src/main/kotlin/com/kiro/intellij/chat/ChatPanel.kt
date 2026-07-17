@@ -614,6 +614,7 @@ function sendMessage() {
     input.innerHTML = '';
     attachedImages = []; imagePreview.innerHTML = '';
     setEnabled(false);
+    stopDraining = false; // 직전 중지의 드레인이 진행 중이어도 새 메시지 이벤트는 렌더링
     fetch(API + '/api/send', { method: 'POST', body: SESSION + '\n' + fullMessage })
         .catch(err => { addErrorMessage('Send failed: ' + err.message); setEnabled(true); });
     schedulePoll(); // isStreaming=true 상태이므로 150ms 폴링으로 즉시 전환
@@ -920,8 +921,14 @@ function setEnabled(en) {
 }
 
 function stopGeneration() {
+    // 중지 시점까지 쌓인 미수신 이벤트를 렌더링 없이 드레인 (중지 후 잔여 말풍선 방지)
+    stopDraining = true;
     fetch(API + '/api/stop', { method: 'POST', body: SESSION })
-        .catch(() => {});
+        .then(() => fetch(API + '/api/events?session=' + SESSION + '&after=' + eventCursor))
+        .then(r => r.json())
+        .then(evs => { for (const ev of evs) if (ev.seq > eventCursor) eventCursor = ev.seq; })
+        .catch(() => {})
+        .finally(() => { stopDraining = false; });
     finishAssistantMessage();
 }
 function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
@@ -1268,10 +1275,12 @@ function renderImagePreviews() {
 // 커서 기반 폴링으로 이벤트를 가져온다 (생성 중 150ms, 대기 중 2s)
 let eventCursor = 0;
 let pollTimer = null;
+let stopDraining = false; // 중지 직후 잔여 이벤트를 렌더링 없이 소비하는 중
 
 function handleEvent(ev) {
-    // 응답 대기 중이 아니면 렌더링하지 않음 (중지 후 도착하는 잔여 chunk/중복 done 무시)
-    if (!isStreaming) return;
+    // 중지된 실행의 이후 출력은 백엔드(실행 세대 가드)에서 차단되므로 기본은 항상 렌더링.
+    // isStreaming으로 걸러내면 늦게 도착하는 정상 응답까지 삼켜버리므로 안 됨.
+    if (stopDraining) return; // 예외: 중지 드레인 중에는 커서만 전진
     if (ev.event === 'start') startAssistantMessage();
     else if (ev.event === 'chunk') appendChunk(ev.data);
     else if (ev.event === 'done') finishAssistantMessage();
