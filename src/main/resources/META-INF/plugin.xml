@@ -31,6 +31,7 @@
             <li>Fix: Spinner animations (e.g. the "Opening browser..." login prompt when signed out) no longer flood the system log &mdash; repeated frames are collapsed into a single line</li>
             <li>Fix: Responses (e.g. to image questions) could be silently dropped when a previous generation had been stopped shortly before &mdash; a late completion signal from the stopped run no longer interferes with the next message</li>
             <li>Stopping a generation no longer leaves a residual partial bubble</li>
+            <li>The message input stays editable while a response is generating, so you can pre-type your next message</li>
         </ul>
 
         <h3>0.2.3</h3>
