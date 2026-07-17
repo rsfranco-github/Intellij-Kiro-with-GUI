@@ -29,6 +29,8 @@
             <li>Fix: Chat responses now arrive in <b>Remote Development</b> environments &mdash; the response stream (SSE) could not pass the remote forwarding layer, so it was replaced with lightweight polling that works both locally and remotely</li>
             <li>Responses are no longer lost if the chat view reconnects mid-generation</li>
             <li>Fix: Spinner animations (e.g. the "Opening browser..." login prompt when signed out) no longer flood the system log &mdash; repeated frames are collapsed into a single line</li>
+            <li>Fix: Responses (e.g. to image questions) could be silently dropped when a previous generation had been stopped shortly before &mdash; a late completion signal from the stopped run no longer interferes with the next message</li>
+            <li>Stopping a generation no longer leaves a residual partial bubble</li>
         </ul>
 
         <h3>0.2.3</h3>
