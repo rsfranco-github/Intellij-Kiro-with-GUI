@@ -13,6 +13,8 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import com.intellij.psi.search.FilenameIndex
+import com.intellij.psi.search.GlobalSearchScope
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.io.File
@@ -282,58 +284,41 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     }
 
     /**
-     * 프로젝트 파일 목록 반환 (# 자동완성용)
+     * 프로젝트 파일 목록 반환 (@ 자동완성용).
+     *
+     * 파일명 쿼리는 IDE의 이름 인덱스(FilenameIndex)로 바로 찾는다. 예전 구현은 프로젝트 전체를
+     * iterateContent로 훑고 메모리에서 걸렀는데, 모노레포에서는 느리고 500개에서 잘려
+     * 찾는 파일이 아예 안 나올 수 있었다.
+     *
+     * 인덱스를 쓸 수 없는 세 경우만 전체 순회로 내려간다:
+     *   - 쿼리가 비었을 때 (열린 파일을 먼저 보여준다)
+     *   - 쿼리에 '/'가 있을 때 (경로 검색이라 이름 인덱스로는 못 찾는다)
+     *   - 인덱싱 중(DumbMode)
      */
     private fun handleProjectFiles(exchange: HttpExchange) {
         setCorsHeaders(exchange)
         if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
 
         val query = exchange.requestURI.query?.let { q ->
-            q.split("&").find { it.startsWith("q=") }?.substringAfter("q=")?.lowercase() ?: ""
-        } ?: ""
+            q.split("&").find { it.startsWith("q=") }?.substringAfter("q=")
+        }?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: ""
 
         val result = StringBuilder()
         val latch = CountDownLatch(1)
 
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val files = mutableListOf<ProjectFileInfo>()
-                val basePath = project.basePath ?: ""
-
-                ReadAction.nonBlocking<Unit> {
-                    val fileIndex = ProjectFileIndex.getInstance(project)
-                    fileIndex.iterateContent { file ->
-                        if (!file.isDirectory && file.isValid) {
-                            val relativePath = if (basePath.isNotEmpty() && file.path.startsWith(basePath))
-                                file.path.removePrefix(basePath).removePrefix("/") else file.path
-                            val dir = relativePath.substringBeforeLast("/", "")
-
-                            // 쿼리가 있으면 필터링
-                            if (query.isEmpty() ||
-                                file.name.lowercase().contains(query) ||
-                                relativePath.lowercase().contains(query)) {
-                                files.add(ProjectFileInfo(file.name, relativePath, dir, file.extension ?: ""))
-                            }
-                        }
-                        files.size < 500 // 최대 500개까지만
-                    }
+                val files = ReadAction.nonBlocking<List<ProjectFileInfo>> {
+                    collectProjectFiles(query)
                 }.executeSynchronously()
 
-                // 파일명 매칭 우선, 그 다음 경로 매칭
-                val sorted = if (query.isNotEmpty()) {
-                    files.sortedWith(compareBy(
-                        { !it.name.lowercase().startsWith(query) },
-                        { !it.name.lowercase().contains(query) },
-                        { it.name.lowercase() }
-                    ))
-                } else {
-                    files.sortedBy { it.name.lowercase() }
-                }.take(50)
-
-                val json = sorted.joinToString(",") { f ->
-                    "{\"name\":\"${escapeJson(f.name)}\",\"path\":\"${escapeJson(f.path)}\",\"dir\":\"${escapeJson(f.dir)}\",\"ext\":\"${escapeJson(f.ext)}\"}"
+                val json = files.joinToString(",") { f ->
+                    "{\"name\":\"${escapeJson(f.name)}\",\"path\":\"${escapeJson(f.path)}\"," +
+                        "\"dir\":\"${escapeJson(f.dir)}\",\"ext\":\"${escapeJson(f.ext)}\"}"
                 }
                 result.append("[$json]")
+            } catch (e: IndexNotReadyException) {
+                result.append("[]")
             } catch (e: Exception) {
                 log.warn("handleProjectFiles error", e)
                 result.append("[]")
@@ -347,6 +332,89 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         }
         exchange.responseHeaders.set("Content-Type", "application/json")
         sendResponse(exchange, 200, if (completed) result.toString() else "[]")
+    }
+
+    /** ReadAction 안에서만 호출해야 한다. */
+    private fun collectProjectFiles(query: String): List<ProjectFileInfo> {
+        val basePath = project.basePath ?: ""
+        val useNameIndex = query.isNotEmpty() &&
+            !ProjectFileSearch.isPathQuery(query) &&
+            !DumbService.isDumb(project)
+
+        val files = if (useNameIndex) {
+            filesFromNameIndex(query, basePath)
+        } else {
+            filesFromContentScan(query, basePath)
+        }
+
+        return ProjectFileSearch.sort(files, query).take(ProjectFileSearch.RESULT_LIMIT)
+    }
+
+    /** IDE 이름 인덱스로 파일명을 찾는다: 전체 순회 없이 후보만 해석한다. */
+    private fun filesFromNameIndex(query: String, basePath: String): List<ProjectFileInfo> {
+        val scope = GlobalSearchScope.projectScope(project)
+        val fileIndex = ProjectFileIndex.getInstance(project)
+        val lower = query.lowercase()
+        val names = mutableListOf<String>()
+
+        FilenameIndex.processAllFileNames({ name ->
+            if (name.lowercase().contains(lower)) names.add(name)
+            names.size < ProjectFileSearch.NAME_CANDIDATE_LIMIT
+        }, scope, null)
+
+        val out = mutableListOf<ProjectFileInfo>()
+        for (name in ProjectFileSearch.sortNames(names, query)) {
+            for (file in FilenameIndex.getVirtualFilesByName(name, scope)) {
+                if (!isMentionableFile(file, fileIndex)) continue
+                out.add(ProjectFileSearch.toInfo(file.name, file.path, file.extension, basePath))
+                if (out.size >= ProjectFileSearch.RESULT_LIMIT) return out
+            }
+        }
+        return out
+    }
+
+    /**
+     * 목록에 넣을 파일인지 판단. 컴파일 산출물(.class 등)과 바이너리를 빼고,
+     * 빌드 출력 폴더나 라이브러리 클래스에 있는 파일도 제외한다
+     * (프로젝트 설정에 따라 인덱스가 이런 파일까지 들고 있다).
+     */
+    private fun isMentionableFile(file: VirtualFile, fileIndex: ProjectFileIndex): Boolean {
+        if (file.isDirectory || !file.isValid) return false
+        if (!ProjectFileSearch.isMentionable(file.extension, file.fileType.isBinary)) return false
+        return try {
+            !fileIndex.isExcluded(file) && !fileIndex.isInLibraryClasses(file)
+        } catch (e: Exception) {
+            true // 판단 불가면 보여준다: 확장자 필터는 이미 통과했다
+        }
+    }
+
+    /**
+     * 인덱스를 못 쓸 때의 대안. 빈 쿼리라면 열린 파일을 먼저 넣어
+     * '@'만 눌렀을 때 지금 보고 있는 파일이 위에 오게 한다.
+     */
+    private fun filesFromContentScan(query: String, basePath: String): List<ProjectFileInfo> {
+        val out = LinkedHashMap<String, ProjectFileInfo>()
+        val fileIndex = ProjectFileIndex.getInstance(project)
+
+        if (query.isEmpty()) {
+            FileEditorManager.getInstance(project).openFiles.forEach { file ->
+                if (isMentionableFile(file, fileIndex)) {
+                    val info = ProjectFileSearch.toInfo(file.name, file.path, file.extension, basePath)
+                    out[info.path] = info
+                }
+            }
+        }
+
+        var scanned = 0
+        fileIndex.iterateContent { file ->
+            if (isMentionableFile(file, fileIndex)) {
+                scanned++
+                val info = ProjectFileSearch.toInfo(file.name, file.path, file.extension, basePath)
+                if (ProjectFileSearch.matches(info, query)) out.putIfAbsent(info.path, info)
+            }
+            out.size < ProjectFileSearch.SCAN_LIMIT && scanned < ProjectFileSearch.SCAN_LIMIT
+        }
+        return out.values.toList()
     }
 
     /**
@@ -443,6 +511,8 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                 for (item in items) {
                     if (out.size >= SYMBOL_LIMIT) return
                     val vFile = (item as? PsiElement)?.containingFile?.virtualFile ?: continue
+                    // 라이브러리에서 디컴파일된 .class 심볼은 멘션해도 CLI가 읽을 수 없다
+                    if (!ProjectFileSearch.isMentionable(vFile.extension, vFile.fileType.isBinary)) continue
                     val relative = if (basePath.isNotEmpty() && vFile.path.startsWith(basePath))
                         vFile.path.removePrefix(basePath).removePrefix("/") else vFile.path
                     val presentation = item.presentation
@@ -525,8 +595,6 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
             null
         }
     }
-
-    private data class ProjectFileInfo(val name: String, val path: String, val dir: String, val ext: String)
 
     private data class ProjectSymbolInfo(
         val name: String,
