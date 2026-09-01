@@ -1,14 +1,18 @@
 package com.kiro.intellij.chat
 
+import com.intellij.navigation.ChooseByNameContributor
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.project.IndexNotReadyException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.PsiElement
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.io.File
@@ -46,6 +50,7 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         server.createContext("/api/models") { exchange -> handleModels(exchange) }
         server.createContext("/api/health") { exchange -> handleHealth(exchange) }
         server.createContext("/api/project-files") { exchange -> handleProjectFiles(exchange) }
+        server.createContext("/api/project-symbols") { exchange -> handleProjectSymbols(exchange) }
         server.createContext("/api/agents") { exchange -> handleAgents(exchange) }
         server.createContext("/api/i18n") { exchange -> handleI18n(exchange) }
         server.createContext("/ui") { exchange -> handleUi(exchange) }
@@ -345,6 +350,116 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     }
 
     /**
+     * 클래스/심볼 목록 반환 (@ 자동완성용).
+     * IDE 인덱스(ChooseByNameContributor)를 그대로 쓰므로 언어별 구현을 따로 만들 필요가 없다.
+     * 인덱싱 중(DumbMode)이거나 쿼리가 2자 미만이면 빈 배열을 돌려준다.
+     */
+    private fun handleProjectSymbols(exchange: HttpExchange) {
+        setCorsHeaders(exchange)
+        if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
+
+        val query = exchange.requestURI.query?.let { q ->
+            q.split("&").find { it.startsWith("q=") }?.substringAfter("q=") ?: ""
+        }?.let { java.net.URLDecoder.decode(it, "UTF-8") } ?: ""
+
+        if (query.length < MIN_SYMBOL_QUERY || DumbService.isDumb(project)) {
+            exchange.responseHeaders.set("Content-Type", "application/json")
+            sendResponse(exchange, 200, "[]")
+            return
+        }
+
+        val result = StringBuilder()
+        val latch = CountDownLatch(1)
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val symbols = mutableListOf<ProjectSymbolInfo>()
+                ReadAction.nonBlocking<Unit> {
+                    collectSymbols(query, ChooseByNameContributor.CLASS_EP_NAME.extensionList, "class", symbols)
+                    if (symbols.size < SYMBOL_LIMIT) {
+                        collectSymbols(query, ChooseByNameContributor.SYMBOL_EP_NAME.extensionList, "symbol", symbols)
+                    }
+                }.executeSynchronously()
+
+                val lower = query.lowercase()
+                val sorted = symbols
+                    .distinctBy { it.name + "|" + it.path }
+                    .sortedWith(compareBy(
+                        { !it.name.lowercase().startsWith(lower) },
+                        { it.name.length },
+                        { it.name.lowercase() }
+                    ))
+                    .take(SYMBOL_LIMIT)
+
+                val json = sorted.joinToString(",") { s ->
+                    "{\"name\":\"${escapeJson(s.name)}\",\"path\":\"${escapeJson(s.path)}\"," +
+                        "\"kind\":\"${escapeJson(s.kind)}\",\"location\":\"${escapeJson(s.location)}\"}"
+                }
+                result.append("[$json]")
+            } catch (e: IndexNotReadyException) {
+                result.append("[]")
+            } catch (e: Exception) {
+                log.warn("handleProjectSymbols error", e)
+                result.append("[]")
+            }
+            latch.countDown()
+        }
+
+        val completed = latch.await(10, TimeUnit.SECONDS)
+        if (!completed) {
+            log.warn("handleProjectSymbols timed out after 10s")
+        }
+        exchange.responseHeaders.set("Content-Type", "application/json")
+        sendResponse(exchange, 200, if (completed) result.toString() else "[]")
+    }
+
+    /** ReadAction 안에서만 호출해야 한다. */
+    private fun collectSymbols(
+        query: String,
+        contributors: List<ChooseByNameContributor>,
+        kind: String,
+        out: MutableList<ProjectSymbolInfo>
+    ) {
+        val lower = query.lowercase()
+        val basePath = project.basePath ?: ""
+        for (contributor in contributors) {
+            if (out.size >= SYMBOL_LIMIT) return
+            val names = try {
+                contributor.getNames(project, false)
+            } catch (e: Exception) {
+                continue
+            }
+            val matched = names.asSequence()
+                .filter { it.lowercase().contains(lower) }
+                .sortedBy { if (it.lowercase().startsWith(lower)) 0 else 1 }
+                .take(SYMBOL_LIMIT)
+            for (name in matched) {
+                if (out.size >= SYMBOL_LIMIT) return
+                val items = try {
+                    contributor.getItemsByName(name, query, project, false)
+                } catch (e: Exception) {
+                    continue
+                }
+                for (item in items) {
+                    if (out.size >= SYMBOL_LIMIT) return
+                    val vFile = (item as? PsiElement)?.containingFile?.virtualFile ?: continue
+                    val relative = if (basePath.isNotEmpty() && vFile.path.startsWith(basePath))
+                        vFile.path.removePrefix(basePath).removePrefix("/") else vFile.path
+                    val presentation = item.presentation
+                    out.add(
+                        ProjectSymbolInfo(
+                            name = presentation?.presentableText ?: name,
+                            path = relative,
+                            kind = kind,
+                            location = presentation?.locationString ?: relative.substringBeforeLast("/", "")
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * 에이전트 목록 반환 (@ 자동완성용)
      */
     private fun handleAgents(exchange: HttpExchange) {
@@ -412,6 +527,19 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
     }
 
     private data class ProjectFileInfo(val name: String, val path: String, val dir: String, val ext: String)
+
+    private data class ProjectSymbolInfo(
+        val name: String,
+        val path: String,
+        val kind: String,
+        val location: String
+    )
+
+    private companion object {
+        /** 쿼리가 너무 짧으면 프로젝트 전체 인덱스를 훑게 되므로 막는다 */
+        const val MIN_SYMBOL_QUERY = 2
+        const val SYMBOL_LIMIT = 30
+    }
     private data class AgentInfo(val name: String, val description: String, val path: String)
 
     // 세션별 HTML 저장 (UI 서빙용)
@@ -451,15 +579,25 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
             val lang = com.kiro.intellij.settings.KiroSettings.getInstance().state.language
             val messages = if (lang == "en") {
                 mapOf(
-                    "placeholder" to "Enter message... (# file, @ agent, / command)",
+                    "placeholder" to "Enter message... (@ file/class/agent, / command)",
                     "openFile" to "Open file",
-                    "systemLog" to "System log"
+                    "systemLog" to "System log",
+                    "activity" to "Activity",
+                    "thinking" to "Working",
+                    "files" to "Files",
+                    "classes" to "Classes & symbols",
+                    "agents" to "Agents"
                 )
             } else {
                 mapOf(
-                    "placeholder" to "메시지를 입력하세요... (# 파일, @ 에이전트, / 커맨드)",
+                    "placeholder" to "메시지를 입력하세요... (@ 파일/클래스/에이전트, / 커맨드)",
                     "openFile" to "열린 파일",
-                    "systemLog" to "시스템 로그"
+                    "systemLog" to "시스템 로그",
+                    "activity" to "작업 내역",
+                    "thinking" to "작업 중",
+                    "files" to "파일",
+                    "classes" to "클래스 · 심볼",
+                    "agents" to "에이전트"
                 )
             }
             val json = messages.entries.joinToString(",") { (k, v) ->
