@@ -139,6 +139,11 @@ object KiroMessages {
         "chat.files" to "파일",
         "chat.classes" to "클래스 · 심볼",
         "chat.agents" to "에이전트",
+        "chat.filesChanged" to "변경된 파일",
+        "chat.viewDiff" to "변경 내용",
+        "chat.revert" to "되돌리기",
+        "chat.reverted" to "되돌림",
+        "chat.deleted" to "삭제됨",
         
         // Common
         "common.error" to "오류",
@@ -280,6 +285,11 @@ object KiroMessages {
         "chat.files" to "Files",
         "chat.classes" to "Classes & symbols",
         "chat.agents" to "Agents",
+        "chat.filesChanged" to "Files changed",
+        "chat.viewDiff" to "Diff",
+        "chat.revert" to "Revert",
+        "chat.reverted" to "reverted",
+        "chat.deleted" to "deleted",
         
         // Common
         "common.error" to "Error",

@@ -107,3 +107,30 @@ body = (mention_driver.replace("__FILES__", json.dumps(FILES))
         .replace("__AGENTS__", json.dumps(AGENTS)))
 (OUT / "mention.html").write_text(html.replace("</body>", body + "\n</body>"), encoding="utf-8")
 print("wrote", OUT / "mention.html")
+
+# --- 4. bloque de archivos modificados (diff / revert) ---------------------
+files_driver = """
+<script>
+window.fetch = function () { return new Promise(function () {}); };
+i18n = { filesChanged: 'Files changed', viewDiff: 'Diff', revert: 'Revert',
+         reverted: 'reverted', deleted: 'deleted' };
+addUserModifiedDemo();
+function addUserModifiedDemo() {
+    addUserMessage('agrega un endpoint de health y actualiza el README');
+    startAssistantMessage();
+    appendChunk('[SYS]I will run the following command: ls (using tool: shell)');
+    appendChunk('[SYS] - Completed in 0.2s');
+    appendFileChange('/home/u/proj/src/main/java/com/acme/web/HealthController.java');
+    appendFileChange('/home/u/proj/README.md');
+    appendChunk('Listo: agregue el endpoint y actualice el README.');
+    finishAssistantMessage();
+    // simula que ya revertiste el segundo
+    var items = document.querySelectorAll('.fc-item');
+    items[1].classList.add('fc-reverted');
+    markFileStatus(items[1], 'reverted', false);
+    items[1].querySelectorAll('.fc-btn').forEach(function (b) { b.disabled = true; });
+}
+</script>
+"""
+(OUT / "files.html").write_text(html.replace("</body>", files_driver + "\n</body>"), encoding="utf-8")
+print("wrote", OUT / "files.html")

@@ -1,9 +1,11 @@
 package com.kiro.intellij.chat
 
+import com.intellij.history.LocalHistory
 import com.intellij.navigation.ChooseByNameContributor
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbService
@@ -11,10 +13,12 @@ import com.intellij.openapi.project.IndexNotReadyException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.kiro.intellij.diff.KiroDiffHandler
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.io.File
@@ -52,6 +56,8 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
         server.createContext("/api/models") { exchange -> handleModels(exchange) }
         server.createContext("/api/health") { exchange -> handleHealth(exchange) }
         server.createContext("/api/project-files") { exchange -> handleProjectFiles(exchange) }
+        server.createContext("/api/file-diff") { exchange -> handleFileDiff(exchange) }
+        server.createContext("/api/file-revert") { exchange -> handleFileRevert(exchange) }
         server.createContext("/api/project-symbols") { exchange -> handleProjectSymbols(exchange) }
         server.createContext("/api/agents") { exchange -> handleAgents(exchange) }
         server.createContext("/api/i18n") { exchange -> handleI18n(exchange) }
@@ -280,6 +286,119 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
             sendResponse(exchange, 200, json)
         } catch (e: Exception) {
             sendResponse(exchange, 500, "{\"status\":\"error\",\"message\":\"${escapeJson(e.message ?: "")}\"}")
+        }
+    }
+
+    // ---- 에이전트가 쓴 파일: diff 보기 / 되돌리기 --------------------------------
+    // CLI는 --trust-all-tools로 이미 파일을 써 버렸으므로 사전 승인은 불가능하다.
+    // 대신 IDE Local History에서 "턴 시작 전" 버전을 꺼내 비교하고 되돌린다 (git 불필요).
+
+    /** 요청 본문: "<sessionId>\n<path>" (handleSend와 같은 형식) */
+    private fun parseFileRequest(exchange: HttpExchange): Result<Pair<ChatSession, VirtualFile>> {
+        val body = exchange.requestBody.bufferedReader().readText()
+        val parts = body.split("\n", limit = 2)
+        val sessionId = parts.getOrNull(0)?.trim().orEmpty()
+        val session = sessions[sessionId]
+            ?: return Result.failure(IllegalStateException("session not found: $sessionId"))
+        val rawPath = parts.getOrNull(1)?.trim().orEmpty()
+        if (rawPath.isEmpty()) return Result.failure(IllegalStateException("missing path"))
+
+        val file = resolveFile(rawPath)
+            ?: return Result.failure(IllegalStateException("file not found: $rawPath"))
+        return Result.success(session to file)
+    }
+
+    /**
+     * CLI는 절대 경로와 프로젝트 상대 경로를 섞어 출력한다. VFS는 절대 경로만 받으므로
+     * 프로젝트 루트(= CLI의 작업 디렉터리) 기준으로 절대 경로를 만들어 조회한다.
+     */
+    private fun resolveFile(rawPath: String): VirtualFile? {
+        val basePath = project.basePath ?: ""
+        val home = System.getProperty("user.home") ?: ""
+        val candidate = FileWriteDetector.absoluteCandidate(rawPath, basePath, home)
+        val lfs = LocalFileSystem.getInstance()
+
+        lfs.refreshAndFindFileByPath(candidate)?.let { return it }
+        // 심볼릭 링크나 './..' 이 섞인 경우
+        return try {
+            lfs.refreshAndFindFileByPath(File(candidate).canonicalPath)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 턴이 시작되기 전의 내용. null이면 그 시점에 존재하지 않았던 파일(= 에이전트가 만든 파일). */
+    private fun contentBeforeTurn(file: VirtualFile, turnStartMillis: Long): ByteArray? = try {
+        LocalHistory.getInstance().getByteContent(file) { revisionTimestamp ->
+            revisionTimestamp < turnStartMillis
+        }
+    } catch (e: Exception) {
+        log.warn("local history lookup failed for ${file.path}", e)
+        null
+    }
+
+    private fun handleFileDiff(exchange: HttpExchange) {
+        setCorsHeaders(exchange)
+        if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
+
+        try {
+            val (session, file) = parseFileRequest(exchange).getOrElse { e ->
+                exchange.responseHeaders.set("Content-Type", "application/json")
+                return sendResponse(exchange, 404, "{\"error\":\"${escapeJson(e.message ?: "not found")}\"}")
+            }
+
+            val before = contentBeforeTurn(file, session.turnStartMillis)
+            val original = before?.toString(Charsets.UTF_8) ?: ""
+            val current = String(file.contentsToByteArray(), Charsets.UTF_8)
+
+            KiroDiffHandler(project).showDiff(file.path, original, current)
+            exchange.responseHeaders.set("Content-Type", "application/json")
+            sendResponse(exchange, 200, "{\"success\":true,\"created\":${before == null}}")
+        } catch (e: Exception) {
+            log.warn("handleFileDiff error", e)
+            sendResponse(exchange, 500, "{\"error\":\"${escapeJson(e.message ?: "diff failed")}\"}")
+        }
+    }
+
+    private fun handleFileRevert(exchange: HttpExchange) {
+        setCorsHeaders(exchange)
+        if (exchange.requestMethod == "OPTIONS") { exchange.sendResponseHeaders(200, -1); return }
+
+        try {
+            val (session, file) = parseFileRequest(exchange).getOrElse { e ->
+                exchange.responseHeaders.set("Content-Type", "application/json")
+                return sendResponse(exchange, 404, "{\"error\":\"${escapeJson(e.message ?: "not found")}\"}")
+            }
+
+            val before = contentBeforeTurn(file, session.turnStartMillis)
+            val result = StringBuilder()
+            val latch = CountDownLatch(1)
+
+            ApplicationManager.getApplication().invokeLater {
+                try {
+                    WriteCommandAction.runWriteCommandAction(project, "Revert Kiro change", null, {
+                        if (before == null) {
+                            // 에이전트가 만든 파일 → 되돌리기 = 삭제
+                            file.delete(this)
+                            result.append("{\"success\":true,\"deleted\":true}")
+                        } else {
+                            file.setBinaryContent(before)
+                            result.append("{\"success\":true,\"deleted\":false}")
+                        }
+                    })
+                } catch (e: Exception) {
+                    log.warn("revert failed for ${file.path}", e)
+                    result.append("{\"error\":\"${escapeJson(e.message ?: "revert failed")}\"}")
+                }
+                latch.countDown()
+            }
+
+            val completed = latch.await(10, TimeUnit.SECONDS)
+            exchange.responseHeaders.set("Content-Type", "application/json")
+            sendResponse(exchange, 200, if (completed) result.toString() else "{\"error\":\"timeout\"}")
+        } catch (e: Exception) {
+            log.warn("handleFileRevert error", e)
+            sendResponse(exchange, 500, "{\"error\":\"${escapeJson(e.message ?: "revert failed")}\"}")
         }
     }
 
@@ -654,7 +773,12 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                     "thinking" to "Working",
                     "files" to "Files",
                     "classes" to "Classes & symbols",
-                    "agents" to "Agents"
+                    "agents" to "Agents",
+                    "filesChanged" to "Files changed",
+                    "viewDiff" to "Diff",
+                    "revert" to "Revert",
+                    "reverted" to "reverted",
+                    "deleted" to "deleted"
                 )
             } else {
                 mapOf(
@@ -665,7 +789,12 @@ class ChatBackendServer(private val project: Project, parentDisposable: Disposab
                     "thinking" to "작업 중",
                     "files" to "파일",
                     "classes" to "클래스 · 심볼",
-                    "agents" to "에이전트"
+                    "agents" to "에이전트",
+                    "filesChanged" to "변경된 파일",
+                    "viewDiff" to "변경 내용",
+                    "revert" to "되돌리기",
+                    "reverted" to "되돌림",
+                    "deleted" to "삭제됨"
                 )
             }
             val json = messages.entries.joinToString(",") { (k, v) ->

@@ -291,6 +291,35 @@ body {
 .act-live-dots span:nth-child(2) { animation-delay: 0.2s; }
 .act-live-dots span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes act-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+/* files the agent wrote in this turn */
+.file-changes {
+    align-self: flex-start; width: 95%; max-width: 95%; margin: 4px 0;
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.file-changes .fc-head {
+    font-size: 11px; font-weight: 600; color: var(--fg-muted);
+    padding: 4px 10px; background: rgba(128,128,128,0.08);
+}
+.fc-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; font-size: 12px; border-top: 1px solid var(--border);
+}
+.fc-item .fc-name { font-weight: 600; color: var(--fg); white-space: nowrap; }
+.fc-item .fc-dir {
+    color: var(--fg-faint); font-size: 10.5px; flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fc-item .fc-status { font-size: 10.5px; color: var(--fg-faint); }
+.fc-item .fc-status.fc-status-error { color: var(--danger); }
+.fc-item.fc-reverted .fc-name { text-decoration: line-through; color: var(--fg-faint); }
+.fc-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.fc-btn {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    background: var(--menu-bg); color: var(--fg); border: 1px solid var(--border);
+}
+.fc-btn:hover:not(:disabled) { background: var(--menu-hover-bg); }
+.fc-btn:disabled { opacity: 0.45; cursor: default; }
+.fc-btn.fc-danger { color: var(--danger); border-color: var(--danger); }
 #image-preview { display: flex; gap: 4px; flex-wrap: wrap; padding: 4px 12px; background: var(--preview-bg); }
 #image-preview:empty { display: none; }
 #image-preview img { max-height: 60px; border-radius: 4px; border: 1px solid var(--preview-border); }
@@ -489,6 +518,7 @@ let currentAssistantWrap = null;
 let currentSysToggle = null;
 let currentActivityItem = null;
 let currentActivityRaw = null;
+let currentFileBlock = null;
 let sysLogCount = 0;
 let openFiles = [];
 let excludedPaths = new Set();
@@ -685,6 +715,7 @@ let typingIndicator = null;
 function startAssistantMessage() {
     currentContent = ''; sysLogCount = 0; currentSysToggle = null;
     currentActivityItem = null; currentActivityRaw = null;
+    currentFileBlock = null;
     currentAssistantWrap = null;
     currentAssistantDiv = null;
     typingIndicator = document.createElement('div');
@@ -1030,6 +1061,103 @@ function finishActivity() {
     currentSysToggle = null;
     currentActivityItem = null;
     currentActivityRaw = null;
+}
+
+// ---- files the agent wrote in this turn ------------------------------------
+// The CLI runs with --trust-all-tools, so the file is already written by the time
+// we hear about it. No pre-approval is possible (in non-interactive mode the CLI
+// rejects a non-trusted tool instead of asking), so we offer diff + revert, backed
+// by the IDE's Local History.
+function ensureFileChangeBlock() {
+    if (currentFileBlock) return currentFileBlock;
+    currentFileBlock = document.createElement('div');
+    currentFileBlock.className = 'file-changes';
+    const head = document.createElement('div');
+    head.className = 'fc-head';
+    currentFileBlock.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'fc-list';
+    currentFileBlock.appendChild(list);
+    messagesDiv.appendChild(currentFileBlock);
+    return currentFileBlock;
+}
+
+function updateFileChangeHead() {
+    if (!currentFileBlock) return;
+    const n = currentFileBlock.querySelectorAll('.fc-item').length;
+    currentFileBlock.querySelector('.fc-head').textContent =
+        (i18n.filesChanged || 'Files changed') + ' (' + n + ')';
+}
+
+function appendFileChange(path) {
+    if (!path) return;
+    ensureFileChangeBlock();
+    const list = currentFileBlock.querySelector('.fc-list');
+    if (list.querySelector('[data-path="' + CSS.escape(path) + '"]')) return;
+
+    const item = document.createElement('div');
+    item.className = 'fc-item';
+    item.dataset.path = path;
+
+    const name = document.createElement('span');
+    name.className = 'fc-name';
+    name.textContent = path.split('/').pop();
+    name.title = path;
+
+    const dir = document.createElement('span');
+    dir.className = 'fc-dir';
+    dir.textContent = path.substring(0, path.lastIndexOf('/'));
+
+    const actions = document.createElement('span');
+    actions.className = 'fc-actions';
+    const diffBtn = document.createElement('button');
+    diffBtn.className = 'fc-btn';
+    diffBtn.textContent = i18n.viewDiff || 'Diff';
+    diffBtn.onclick = () => fileAction('/api/file-diff', path, item, diffBtn);
+    const revertBtn = document.createElement('button');
+    revertBtn.className = 'fc-btn fc-danger';
+    revertBtn.textContent = i18n.revert || 'Revert';
+    revertBtn.onclick = () => fileAction('/api/file-revert', path, item, revertBtn);
+    actions.appendChild(diffBtn);
+    actions.appendChild(revertBtn);
+
+    item.appendChild(name);
+    item.appendChild(dir);
+    item.appendChild(actions);
+    list.appendChild(item);
+    updateFileChangeHead();
+    scrollToBottom();
+}
+
+function fileAction(endpoint, path, item, btn) {
+    const isRevert = endpoint.indexOf('revert') !== -1;
+    btn.disabled = true;
+    fetch(API + endpoint, { method: 'POST', body: SESSION + '\n' + path })
+        .then(r => r.json())
+        .then(res => {
+            if (res.error) { markFileStatus(item, '⚠ ' + res.error, true); btn.disabled = false; return; }
+            if (isRevert) {
+                item.classList.add('fc-reverted');
+                markFileStatus(item, res.deleted
+                    ? (i18n.deleted || 'deleted')
+                    : (i18n.reverted || 'reverted'), false);
+                item.querySelectorAll('.fc-btn').forEach(b => b.disabled = true);
+            } else {
+                btn.disabled = false;
+            }
+        })
+        .catch(() => { markFileStatus(item, '⚠', true); btn.disabled = false; });
+}
+
+function markFileStatus(item, text, isError) {
+    let tag = item.querySelector('.fc-status');
+    if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'fc-status';
+        item.querySelector('.fc-actions').before(tag);
+    }
+    tag.classList.toggle('fc-status-error', !!isError);
+    tag.textContent = text;
 }
 
 function appendChunk(chunk) {
@@ -1505,6 +1633,7 @@ function handleEvent(ev) {
     else if (ev.event === 'chunk') appendChunk(ev.data);
     else if (ev.event === 'done') finishAssistantMessage();
     else if (ev.event === 'error') { if (ev.data) addErrorMessage(ev.data); finishAssistantMessage(); }
+    else if (ev.event === 'file') appendFileChange(ev.data);
 }
 
 function pollEvents() {
